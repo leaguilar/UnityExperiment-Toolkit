@@ -33,7 +33,7 @@ The first time you open the project, the start-up might take a few minutes.
 
 # Using the Toolkit
 Find the tutorials to the toolkit's three main features here:
-- [Virtual Walkthrough in Unity](/docs/virtual_walkthrough.md): Design walkthroughs in your virtual environments and analyze participants trajectories and visual attention patterns.
-- **Agent-Based Modeling**: Tutorial in development.
-- **SinglePlayer VR Experiment**: Tutorial in development.
-- **Multiplayer VR Experiment**: Tutorial in development.
+- [Virtual Walkthrough in Unity](docs/virtual_walkthrough.md): Design walkthroughs in your virtual environments and analyze participants trajectories and visual attention patterns.
+- [Agent-Based Modeling](docs/agent_based_simulation.md): Create an agent based simulation with virtual humans
+- [VR Experiment](docs/vr_experiment.md): Build a VR Experiment
+- [Scripts Documentation](docs/scripts_documentation.md): Informatoin about the different scripts in the repo.

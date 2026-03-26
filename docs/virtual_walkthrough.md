@@ -148,3 +148,93 @@ The file contains a table, where each row corresponds to a trajectory, and eac
 - **RatioShortestPath**: length(trajectory) / length(shortest path)
 - **Successful**: 1 if the target was reached, 0 otherwise
 All of the following columns correspond to layers in the project. Continuing the previous example, a value of `0.38` in the column `Windows` means that the corresponding participant has cumulatively had objects of layer `Windows` in their field of view for 38% of the walkthrough.
+# 4 Multi-Participant Walkthrough with Ubiq
+
+The toolkit supports running simultaneous walkthroughs where multiple participants share the same virtual environment and can see each other move in real time. This is implemented with [Ubiq](https://ubiq.online/), a Unity networking framework for social VR research.
+
+The reference scene is `Assets/Scenes/SampleSceneMultiplayer.unity`.
+
+## 4.1 Install Ubiq
+
+Ubiq is **not included** in the project's `Packages/manifest.json` and must be added manually.
+
+1. Open `Window > Package Manager`.
+2. Click `+` → `Add package from git URL...`
+3. Enter:
+   ```
+   https://github.com/UCL-VR/ubiq.git?path=/Unity
+   ```
+4. Wait for Unity to import the package.
+
+Once installed, the `#define UBIQ_PRESENT` directive at the top of `UbiqNetworkedPlayer.cs` activates the networking code. Without Ubiq the script compiles as a no-op stub so the project still builds.
+
+## 4.2 How It Works
+
+`UbiqNetworkedPlayer` extends Ubiq's `NetworkedBehaviour`. Every frame, the **local** player's state is serialised to JSON and broadcast to all peers via `context.Send()`. Each **remote** peer's `ProcessMessage()` receives those packets and drives the remote player's transform directly.
+
+What is synchronised:
+- Body position (`x`, `y`, `z`)
+- Body yaw rotation (Y axis only — the body never pitches or rolls)
+- Head pitch rotation (camera local X euler angle)
+
+`PlayerMovement` and `MouseTracker` both have an `isLocalPlayer` flag. When `isLocalPlayer = false`, keyboard/mouse input is ignored and the cursor is not locked, so remote player GameObjects are purely driven by incoming network messages.
+
+## 4.3 Scene Setup
+
+### Ubiq NetworkScene
+
+Every Ubiq scene needs a **NetworkScene** root object. In the `SampleSceneMultiplayer` scene this is already present. For a new scene:
+
+1. In the `Project` window, search for the `NetworkScene` prefab (installed by Ubiq).
+2. Drag it into the scene hierarchy.
+3. The `NetworkScene` component holds the server address. By default it connects to Ubiq's public research server. For a private deployment, set the `ServerUrl` and `Port` fields.
+
+### Player prefab
+
+Each participant needs a player prefab with all three components on the same root GameObject:
+
+| Component | Purpose |
+|---|---|
+| `PlayerMovement` | WASD movement (active only on local player) |
+| `MouseTracker` | Mouse-look (active only on local player) |
+| `UbiqNetworkedPlayer` | Broadcasts local state; receives and applies remote state |
+
+`UbiqNetworkedPlayer` finds `PlayerMovement` on the same GameObject and `MouseTracker` in the children automatically on `Start`.
+
+**Required child:** a GameObject with a `Camera` component. `UbiqNetworkedPlayer` scans `transform.GetChild(i)` for a `Camera` — this is the head whose pitch is synchronised.
+
+To record data in a multiplayer session, attach `CaptureWalkthrough` to the **local player prefab only**. Remote player instances do not need it.
+
+### Ownership assignment
+
+`isLocalPlayer` defaults to `true` in the Inspector. When your peer/avatar manager spawns a remote player prefab, call:
+
+```csharp
+networkedPlayer.SetOwnership(false);
+```
+
+This disables `PlayerMovement` input and `MouseTracker` input on that instance so it is purely driven by the network. Keep `isLocalPlayer = true` for the local player (the default).
+
+A minimal spawn pattern:
+
+```csharp
+// Called by your Ubiq avatar/peer manager when a new peer joins:
+var go = Instantiate(playerPrefab);
+var net = go.GetComponent<UbiqNetworkedPlayer>();
+bool isMe = (peer == networkScene.Me);   // identify local vs remote peer
+net.SetOwnership(isMe);
+```
+
+## 4.4 Running a Multi-Participant Session
+
+1. Build the project or use two Editor instances with [ParrelSync](https://github.com/VeriorPies/ParrelSync) to avoid maintaining two full project copies.
+2. Press **Play** on both instances. Both connect to the same Ubiq `NetworkScene` server automatically.
+3. Each participant controls their own player; the other's avatar moves in their view in real time.
+4. `CaptureWalkthrough` on each local player records independently to separate CSV files, one per participant.
+
+## 4.5 Limitations and Notes
+
+- **No server-side physics authority:** Ubiq uses a simple multicast model. Each client simulates gravity and movement independently.
+- **Remote players pass through walls:** `PlayerMovement` is disabled on remote players so their `CharacterController` is not driven by input — their position is set directly from the received network message, bypassing collision. This is expected for observer avatars.
+- **Latency:** on the public Ubiq server expect ~50–200 ms round-trip. A private Ubiq server on a local network gives sub-10 ms.
+- **Scalability:** state is broadcast every `Update` frame (~60 Hz). For more than ~10 simultaneous participants, reduce broadcast rate by adding a time accumulator in `UbiqNetworkedPlayer.Update`.
