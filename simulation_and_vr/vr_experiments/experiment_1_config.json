@@ -3,5 +3,6 @@
   "requiredParticipants": 2,
   "countdownSeconds": 5,
   "nextSceneName": "LoadTrial",
-  "dataAssemblyUrl": "https://your-server.com/collect"
+  "dataAssemblyUrl": "https://your-server.com/collect",
+  "buildFolder": "WebGLBuild"
 }

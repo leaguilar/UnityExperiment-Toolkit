@@ -145,7 +145,8 @@ PracticePanel (button) → KeyboardTestW → KeyboardTestS → MouseTest → Fin
   "requiredParticipants": 2,
   "countdownSeconds": 5,
   "nextSceneName": "LoadTrial",
-  "dataAssemblyUrl": "https://your-server.com/collect"
+  "dataAssemblyUrl": "https://your-server.com/collect",
+  "buildFolder": "WebGLBuild"
 }
 ```
 
@@ -156,6 +157,7 @@ PracticePanel (button) → KeyboardTestW → KeyboardTestS → MouseTest → Fin
 | `countdownSeconds` | Seconds between "all connected" and loading the next scene. Gives latecomers a buffer. |
 | `nextSceneName` | Scene to load after the countdown. |
 | `dataAssemblyUrl` | Overrides `Database.DataCollectionServerURL`. Same as `dataAssemblyUrl` in `config.json`; can be set here alone if the Lobby is the first scene to run. |
+| `buildFolder` | Name of the local WebGL build folder served by `serve_experiment.go`. Not used by the Unity build itself. |
 
 **Deploying the config file:**
 - **WebGL:** place `experiment_1_config.json` at the same URL root as the build (e.g. alongside `index.html`). `LobbyManager` resolves relative URLs against `Application.absoluteURL`.
@@ -274,6 +276,37 @@ Field definitions: `id`=participantId, `sid`=sessionId, `eid`=experimentId, `tnu
 4. To deploy multiple groups, add one experimental scene per group and list them in `LoadTrial.Trials` in order (group 1 → index 0, group 2 → index 1, etc.).
 5. Place target materials in `Assets/Resources/TargetMaterials/`.
 6. For the admin backdoor, type `6`, `4`, `8`, `5`, `9`, `9`, `7`, `2` in sequence during any scene.
+
+---
+
+## Serving the WebGL Build Locally
+
+`simulation_and_vr/vr_experiments/serve_experiment.go` is a minimal Go file server for testing a WebGL build on your local machine.
+
+**Prerequisites:** Go 1.20+ installed.
+
+**Setup:**
+
+1. Export a WebGL build from Unity and place the output folder next to `serve_experiment.go`.
+2. Set `"buildFolder"` in `experiment_1_config.json` to the name of that folder.
+3. Place `experiment_1_config.json` inside the build folder so the build can fetch it at runtime.
+
+**Run:**
+
+```bash
+cd simulation_and_vr/vr_experiments
+go run serve_experiment.go
+```
+
+The server listens on `http://localhost:8080`. Open the experiment with URL parameters:
+
+```
+http://localhost:8080/index.html?ExpID=AABBCC&group=1
+```
+
+This is equivalent to a production deployment — all URL parameters (`ExpID`, `group`, `assignmentId`, `workerId`) are parsed by `ParticipantInfoPage` exactly as they would be on a remote host.
+
+> The file server is for **local testing only**. For deployed studies use a proper web host (nginx, S3 static hosting, etc.) and pair it with the Go data collection server described below.
 
 ---
 
