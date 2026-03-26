@@ -452,48 +452,9 @@ The `NetworkScene` and `TrialSyncManager` are only needed in the experimental sc
 
 ### Peer Manager: Spawning Remote Avatars
 
-Create a `PeerManager` MonoBehaviour on a new GameObject in the experimental scene:
+`Assets/Scripts/Virtual Reality/PeerManager.cs` handles spawning and destroying remote avatar instances as peers join and leave the Ubiq `NetworkScene`. Add it to a new GameObject in the experimental scene and wire `remoteAvatarPrefab` in the Inspector.
 
-```csharp
-using UnityEngine;
-using Ubiq.Peers;
-using Ubiq.Messaging;
-using System.Collections.Generic;
-
-public class PeerManager : MonoBehaviour
-{
-    public GameObject remoteAvatarPrefab;
-
-    private NetworkScene networkScene;
-    private readonly Dictionary<string, GameObject> remoteAvatars = new();
-
-    private void Start()
-    {
-        networkScene = NetworkScene.Find(this);
-        networkScene.OnPeerAdded   += OnPeerAdded;
-        networkScene.OnPeerRemoved += OnPeerRemoved;
-    }
-
-    private void OnPeerAdded(IPeer peer)
-    {
-        if (peer == networkScene.Me) return;
-        var avatar = Instantiate(remoteAvatarPrefab);
-        avatar.GetComponent<UbiqNetworkedPlayer>().SetOwnership(false);
-        remoteAvatars[peer.UUID] = avatar;
-    }
-
-    private void OnPeerRemoved(IPeer peer)
-    {
-        if (remoteAvatars.TryGetValue(peer.UUID, out var avatar))
-        {
-            Destroy(avatar);
-            remoteAvatars.Remove(peer.UUID);
-        }
-    }
-}
-```
-
-> Ubiq's peer API (`OnPeerAdded`, `IPeer.UUID`) may differ slightly between package versions. Consult the installed Ubiq documentation if the above does not compile.
+> Ubiq's peer API (`OnPeerAdded`, `IPeer.UUID`) may differ slightly between package versions. Consult the installed Ubiq documentation if the script does not compile.
 
 ### Updated Experimental Scene Checklist
 
