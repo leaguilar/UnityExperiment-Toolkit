@@ -1,0 +1,27 @@
+{
+  "EngineScript_sampleInterval": 1,
+  "Scene": "Unnamed Vessel Deck 5 e2.1",
+  "simId": 1,
+  "Scenario": "Basecase",
+  "Purpose": "Experiment 2",
+  "tasks": [
+    {
+      "spawnInterval": 1,
+      "agentSize": 0.8,
+      "numberOfAgents": 100,
+      "taskName": "Passenger",
+      "revisit": true,
+      "poiTime": 1,
+      "pointsOfInterest": "Stopby",
+      "end": "Room, Circulation",
+      "agentType": "Passenger",
+      "chooseNonDeterministically": true,
+      "numberOfNeeds": 1,
+      "agentSpeed": 1,
+      "start": "Room, Circulation",
+      "privacyRadius": 1,
+      "agentRadius": 0.5,
+      "taskColor": "black"
+    }
+  ]
+}

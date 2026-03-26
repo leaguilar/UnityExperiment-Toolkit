@@ -4,8 +4,37 @@ Temp
 
 *.mp4
 
+# Unity generated folders (large, regenerated automatically)
+unity_files/Library/
+unity_files/Temp/
+unity_files/obj/
+unity_files/Logs/
+unity_files/UserSettings/
+
+# Large asset folders (project-specific geometry/models, not needed for students)
+unity_files/Assets/Base model/
+unity_files/Assets/Geometry/
+
+# Project-specific scenes (not part of the student toolkit)
+unity_files/Assets/Scenes/Celestyal*/
+unity_files/Assets/Scenes/Celestyal*.unity
+unity_files/Assets/Scenes/Celestyal*.unity.meta
+unity_files/Assets/Scenes/Celestyal*.meta
+unity_files/Assets/Scenes/Unnamed Vessel*/
+unity_files/Assets/Scenes/Unnamed Vessel*.unity
+unity_files/Assets/Scenes/Unnamed Vessel*.unity.meta
+unity_files/Assets/Scenes/Unnamed Vessel*.meta
+unity_files/Assets/Scenes/MultiFloor/
+unity_files/Assets/Scenes/MultiFloor.unity
+unity_files/Assets/Scenes/MultiFloor.unity.meta
+unity_files/Assets/Scenes/MultiFloor.meta
+unity_files/Assets/Scenes/SingleFloor.unity
+unity_files/Assets/Scenes/SingleFloor.unity.meta
+unity_files/Assets/Scenes/SampleSceneMultiplayer.unity
+unity_files/Assets/Scenes/SampleSceneMultiplayer.unity.meta
+
 # Test scene
 unity_files/Assets/Scenes/DoNotGetLost.unity
 unity_files/Assets/Scenes/DoNotGetLost.unity.meta
-unity_files/Assets/Prefabs/WestageShoppingMall.prefab 
+unity_files/Assets/Prefabs/WestageShoppingMall.prefab
 unity_files/Assets/Prefabs/WestageShoppingMall.prefab.meta

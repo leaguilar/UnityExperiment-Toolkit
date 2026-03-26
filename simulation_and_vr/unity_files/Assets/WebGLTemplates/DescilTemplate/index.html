@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <!--<title>%UNITY_WEB_NAME%</title>-->
+  <title>Cognitive Science Experiment</title>
+  <style>
+    html {
+      box-sizing: border-box;
+    }
+
+    *,
+    *:before,
+    *:after {
+      box-sizing: inherit;
+    }
+
+    body {
+      margin: 0;
+      background: #444;
+    }
+
+    #gameContainer {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* try to handle mobile dialog */
+    canvas+* {
+      z-index: 2;
+    }
+
+    .logo {
+      display: block;
+      max-width: 60vw;
+      max-height: 40vh;
+    }
+
+    .waitText {
+      color: white;
+    }
+
+    .progress {
+      margin: 1.5em;
+      border: 1px solid white;
+      width: 50vw;
+      display: none;
+    }
+
+    .progress .full {
+      margin: 2px;
+      background: white;
+      height: 1em;
+      transform-origin: top left;
+    }
+
+    #loader {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .spinner,
+    .spinner:after {
+      border-radius: 50%;
+      width: 5em;
+      height: 5em;
+    }
+
+    .spinner {
+      margin: 10px;
+      font-size: 10px;
+      position: relative;
+      text-indent: -9999em;
+      border-top: 1.1em solid rgba(255, 255, 255, 0.2);
+      border-right: 1.1em solid rgba(255, 255, 255, 0.2);
+      border-bottom: 1.1em solid rgba(255, 255, 255, 0.2);
+      border-left: 1.1em solid #ffffff;
+      transform: translateZ(0);
+      animation: spinner-spin 1.1s infinite linear;
+    }
+
+    @keyframes spinner-spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="gameContainer"></div>
+  <div id="loader">
+    <img class="logo" src="logo.png">
+    <div class="waitText"><br> Loading Please wait...</div>
+    <div class="spinner"></div>
+    <div class="progress">
+      <div class="full"></div>
+    </div>
+  </div>
+</body>
+
+<script src="%UNITY_WEBGL_LOADER_URL%"></script>
+<script src='mapbox-gl-supported.js'></script>
+<script>
+  // NEEDS A BETTER DESIGN
+  function createUUID() {
+    // http://www.ietf.org/rfc/rfc4122.txt //Modified
+    var s = [];
+    var hexDigits = "0123456789abcdef";
+    for (var i = 0; i < 36; i++) {
+      s[i] = hexDigits.substr(Math.floor(Math.random() * 0x10), 1);
+    }
+    s[14] = "4";  // bits 12-15 of the time_hi_and_version field to 0010
+    s[19] = hexDigits.substr((s[19] & 0x3) | 0x8, 1);  // bits 6-7 of the clock_seq_hi_and_reserved to 01
+    s[8] = s[13] = s[18] = s[23] = "";
+
+    var uuid = s.join("");
+    return uuid;
+  }
+
+  function getUrlVars() {
+    var vars = {};
+    var parts = window.location.href.replace(/[?&]+([^=&]+)=([^&]*)/gi, function (m, key, value) {
+      vars[key] = value;
+    });
+    return vars;
+  }
+
+  function getUrlParam(parameter, defaultvalue) {
+    var urlparameter = defaultvalue;
+    if (window.location.href.indexOf(parameter) > -1) {
+      urlparameter = getUrlVars()[parameter];
+    }
+    return urlparameter;
+  }
+
+  function readTextFile(fileURL, callback) {
+    var rawFile = new XMLHttpRequest();
+    rawFile.overrideMimeType("application/json");
+    rawFile.open("GET", fileURL, true);
+    rawFile.onreadystatechange = function () {
+      if (rawFile.readyState === 4 && rawFile.status == "200") {
+        callback(rawFile.responseText);
+      }
+    }
+    rawFile.send(null);
+  }
+
+  //usage:
+  readTextFile("/config.json", function (text) {
+    var configData = JSON.parse(text);
+    console.log(configData);
+
+    var xhr = new XMLHttpRequest();
+    var dataCollectionUrl = configData['dataAssemblyUrl'];
+    const guid = createUUID();
+    var currentdate = new Date();
+    const datetime = "" + currentdate.getDate() + "/" + (currentdate.getMonth() + 1) + "/" + currentdate.getFullYear() + " " + currentdate.getHours() + ":" + currentdate.getMinutes() + ":" + currentdate.getSeconds();
+
+    xhr.open("POST", dataCollectionUrl, true);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4 && xhr.status === 200) {
+      }else{
+        console.log("Failed to communicate to the data assembly service")
+      }
+    };
+
+    var expID = getUrlParam('ExpID', 'Emtpy')
+    var group = getUrlParam('group', 'Emtpy')
+
+
+    if (mapboxgl.supported({ failIfMajorPerformanceCaveat: true })) {
+      var gameInstance = UnityLoader.instantiate("gameContainer", "%UNITY_WEBGL_BUILD_URL%", { onProgress: UnityProgress });
+      var webglState = 'OK'
+      const data = `{"id":"loadingWebGL","sid":"` + webglState + '' + guid + `","eid":"` + expID + `","mid":"0","cat":"` + webglState + `","meta":"` + webglState + ' Group:' + group + `","date":"` + datetime + `"}`;
+      xhr.send(data);
+      gameInstance.SendMessage('ParticipantInfoPage', 'AssignHost', dataCollectionUrl);
+    } else {
+      document.querySelector("#loader > img").src = "fail.png"
+      document.querySelector("#loader > div.waitText").style.display = "none";
+      document.querySelector("#loader > div.spinner").style.display = "none";
+      var webglState = 'BAD'
+      const data = `{"id":"loadingWebGL","sid":"` + webglState + '' + guid + `","eid":"` + expID + `","mid":"0","cat":"` + webglState + `","meta":"` + webglState + ' Group:' + group + `","date":"` + datetime + `"}`;
+      xhr.send(data);
+    }
+
+    //var gameInstance = UnityLoader.instantiate("gameContainer", "Build/ZollMTURK.json", {onProgress: UnityProgress});
+    function UnityProgress(gameInstance, progress) {
+      if (!gameInstance.Module) {
+        return;
+      }
+      const loader = document.querySelector("#loader");
+      if (!gameInstance.progress) {
+        const progress = document.querySelector("#loader .progress");
+        progress.style.display = "block";
+        gameInstance.progress = progress.querySelector(".full");
+        loader.querySelector(".spinner").style.display = "none";
+      }
+      gameInstance.progress.style.transform = `scaleX(${progress})`;
+      if (progress === 1 && !gameInstance.removeTimeout) {
+        gameInstance.removeTimeout = setTimeout(function () {
+          loader.style.display = "none";
+        }, 2000);
+      }
+    }
+
+  });
+</script>
+
+</html>
