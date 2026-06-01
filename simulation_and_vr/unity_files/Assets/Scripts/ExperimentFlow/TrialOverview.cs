@@ -12,30 +12,25 @@ namespace Assets.Scripts
     {
         public int Repetitions = 3;
         
-        public Text HeaderText;
-
-        public Text DescriptionText;
-
+        public TMP_Text HeaderText;
+        public TMP_Text DescriptionText;
         public Image DescriptionImage;
-
         public TMP_Text HintText;
-
         public Image HintImage;
 
+        [Header("Controller & Sync")]
         public PlayerMovement FPSController;
-
-        /// <summary>
-        /// Optional. When set, trial start/end are synchronised over the network
-        /// so all participants in the session execute the same trial simultaneously.
-        /// Leave null for single-participant experiments.
-        /// </summary>
+        public MouseTracker mouseTracker;
+        public GameObject interactionDot;
+        public ParticipantRecorder Recorder;
+        public Transform Spawnpoint;
         public TrialSyncManager SyncManager;
 
-        public ParticipantRecorder Recorder;
-
-        public GameObject Spawnpoint;
-
         public string NextSceneName;
+
+        private Vector3 manualStartPosition;
+        private Quaternion manualStartRotation;
+        private bool hasSavedManualPos = false;
 
         private List<Target> tasks;
         
@@ -58,6 +53,8 @@ namespace Assets.Scripts
             Random.InitState(seed / 2 + SceneManager.GetActiveScene().name.GetHashCode() / 2);
             
             var allTargets = FindObjectsOfType<Target>();
+            Debug.Log($"[TrialOverview] 场景体检：共发现 {allTargets.Length} 个目标球。");
+            foreach(var t in allTargets) Debug.Log($" - 发现目标 #{t.Number}: {t.Description}");
 
             tasks = new List<Target>(allTargets.Length * Repetitions);
             for (var i = 0; i < Repetitions; i++)
@@ -97,7 +94,24 @@ namespace Assets.Scripts
 
         protected new void OnEnable()
         {
+            // 确保文字和逻辑在面板出现时是隐藏的
+            if (HintText != null) HintText.gameObject.SetActive(false);
+            if (HintImage != null) HintImage.gameObject.SetActive(false);
+
+            // 终极修复：如果场景缺了 EventSystem，自动造一个
+            if (UnityEngine.Object.FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
+            {
+                var eventSystem = new GameObject("EventSystem_AutoCreated");
+                eventSystem.AddComponent<UnityEngine.EventSystems.EventSystem>();
+                eventSystem.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+            }
+
             base.OnEnable();
+
+            // 锁定控制
+            if (FPSController != null) FPSController.enabled = false;
+            if (mouseTracker != null) mouseTracker.enabled = false;
+            if (interactionDot != null) interactionDot.SetActive(false);
 
             Database.EndTrial();
 
@@ -107,8 +121,8 @@ namespace Assets.Scripts
                 return;
             }
 
-            FPSController.enabled = false;
-            Recorder.StopRecording();
+            if (Recorder != null) Recorder.StopRecording();
+            
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
 
@@ -117,22 +131,36 @@ namespace Assets.Scripts
 
             currentMaterial = materials[0];
             materials.RemoveAt(0);
-            var materialName = currentMaterial.name.ToLowerInvariant();
 
-            var renderer = currentTarget.GetComponent<Renderer>();
-            if (renderer == null)
+            // 修正：确保球能被看见
+            if (currentTarget != null)
             {
-                Debug.LogError("The target has no renderer attached.");
-                this.enabled = false;
-                Application.Quit(666);
-                return;
+                var renderer = currentTarget.GetComponent<Renderer>();
+                if (renderer != null)
+                {
+                    renderer.sharedMaterial = currentMaterial;
+                    renderer.enabled = true; // 强制开启渲染器
+                }
+                
+                // 强制开启物体及其碰撞
+                currentTarget.gameObject.SetActive(true);
+                var collider = currentTarget.GetComponent<Collider>();
+                if (collider != null) collider.enabled = true;
             }
 
-            renderer.sharedMaterial = currentMaterial;
-
             HeaderText.text = $"Task Goal #{Database.TrialResults.Count + 1} of {this.totalTasks}";
-            DescriptionText.text = $"Find the {currentTarget.Description} and go to the {materialName} ball that is placed there.";
-            DescriptionImage.color = currentMaterial.color;
+            DescriptionText.text = $"Find the {currentTarget.Description}\nGo to the {currentMaterial.name.ToLower()} ball.";
+            
+            if (DescriptionImage != null)
+            {
+                DescriptionImage.color = currentMaterial.color;
+            }
+            else
+            {
+                Debug.LogWarning("[TrialOverview] 缺少 Description Image 引用，跳过颜色预览更新。");
+            }
+            
+            Debug.Log("[TrialOverview] 面板已激活，控制已锁定，等待点击开始...");
         }
 
         protected override void OnApplyPage()
@@ -157,18 +185,40 @@ namespace Assets.Scripts
         /// </summary>
         public void OnNetworkTrialStart(int targetId, string materialName)
         {
+            // 自动补救：如果开始后还没连上 HintText，尝试找一下
+            if (HintText == null) HintText = GameObject.Find("HintText")?.GetComponent<TMP_Text>();
+
+            string hintMsg = $"Target: {currentTarget.Description}\nColor: {currentMaterial.name}";
+
             if (HintText != null)
             {
-                HintText.text = $"Destination: {currentTarget.Description}\nShape: Ball\nColor: {currentMaterial.name.ToLowerInvariant()}";
+                // 强制修复：如果 HintText 被藏在面板里，把它救出来
+                if (HintText.transform.IsChildOf(this.transform))
+                {
+                    Debug.LogWarning("[TrialOverview] 检测到 HintText 被错误地放在了面板内部，正在将其移至 Canvas 根部以防止消失。");
+                    HintText.transform.SetParent(this.transform.parent, true);
+                }
+
+                HintText.gameObject.SetActive(true);
+                HintText.text = hintMsg;
+            }
+            else
+            {
+                Debug.LogWarning("[TrialOverview] 缺少 HUD HintText 引用。当前任务目标：" + hintMsg);
             }
 
             if (HintImage != null)
             {
+                HintImage.gameObject.SetActive(true);
                 HintImage.color = currentMaterial.color;
             }
 
             PlaceFPSController();
-            FPSController.enabled = true;
+            
+            if (FPSController != null) FPSController.enabled = true;
+            if (mouseTracker != null) mouseTracker.enabled = true;
+            if (interactionDot != null) interactionDot.SetActive(true);
+
             Recorder.StartRecording();
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
@@ -183,10 +233,20 @@ namespace Assets.Scripts
 
         private void PlaceFPSController()
         {
-            var position = Spawnpoint.transform.position + Vector3.up * 0.9f;
-            var rotation = Quaternion.Euler(0, 0, 0);
+            if (FPSController == null) return;
 
-            FPSController.gameObject.PlaceObject(position, rotation);
+            var position = Spawnpoint != null 
+                ? Spawnpoint.transform.position + Vector3.up * 0.9f 
+                : transform.position; // 这里的 transform 指的是面板的位置，作为兜底
+            
+            var rotation = Spawnpoint != null 
+                ? Spawnpoint.transform.rotation 
+                : Quaternion.identity;
+
+            // 改回最原始的赋值方式
+            FPSController.transform.position = position;
+            FPSController.transform.rotation = rotation;
+            Debug.Log($"[TrialOverview] 玩家已复位到: {position}");
         }
 
         private void RandomizeOrder<T>(IList<T> items)

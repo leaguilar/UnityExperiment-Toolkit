@@ -24,6 +24,6 @@ public class TestKeyboardMovement : ControlTest
     /// <inheritdoc />
     protected override void OnTestFinished()
     {
-        Database.SendMetaData("Practice", $"Finished key \"{this.key}\" practice.");
+        //Database.SendMetaData("Practice", $"Finished key \"{this.key}\" practice.");
     }
 }

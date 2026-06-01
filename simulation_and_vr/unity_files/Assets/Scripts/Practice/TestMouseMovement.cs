@@ -43,7 +43,7 @@ namespace Assets.Scripts
         /// <inheritdoc />
         protected override void OnTestFinished()
         {
-            Database.SendMetaData("Practice", "Finished mouse practice.");
+            //Database.SendMetaData("Practice", "Finished mouse practice.");
         }
 
         private float GetChange()

@@ -1,6 +1,6 @@
 ﻿/*
-DesignMind2: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
-Copyright (C) 2023-2026  michal Gath-Morad, Christoph Hölscher, Raphaël Baur, Leonel Aguilar
+DesignMind: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
+Copyright (C) 2023  michal Gath-Morad, Christoph Hölscher, Raphaël Baur
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
 using System;
-using System.Linq;
 using System.Globalization;
 using System.Threading.Tasks;
 
@@ -52,14 +51,6 @@ public class ABMVisualizer : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-    #if UNITY_EDITOR
-
-        if (!File.Exists(fileName))
-        {
-            // If the file does not exist, ask the user to input a file
-            Debug.LogWarning("File does not exist. Please input a valid file path to use the Visualizer");
-            return;
-        }
         // Removing leading and trailing whitespaces.
         for (int i = 0; i < agentTypeFilter.Count; i++) {
             agentTypeFilter[i] = agentTypeFilter[i].Trim();
@@ -158,16 +149,15 @@ public class ABMVisualizer : MonoBehaviour
         float[] gradientValsFlat = EBDMath.Flatten(gradientVals).ToArray();
 
         (float min, float max) = EBDMath.MinMax(gradientVals);
-        float startRender = Time.time;
+        float startRender = Time.realtimeSinceStartup;
         CreateParticles(
             gridFlat,
             gradientValsFlat,
             resolution,
             compare ? gradientCompare : gradient
         );
-        float endRender = Time.time;
+        float endRender = Time.realtimeSinceStartup;
         Debug.Log("Time rendering: " + (endRender - startRender));
-    #endif
     }
 
     private List<Vector3> CreateTrajectory(string[] str, int startIdx)
@@ -181,7 +171,7 @@ public class ABMVisualizer : MonoBehaviour
         {
             // Index offset by the initial, unnecessary columns.
             int I = startIdx + 3 * i;
-            if ((str[I] == "NaN")||(str[I] == "") ) 
+            if (str[I] == "NaN") 
             {
                 break;
             }
@@ -210,8 +200,8 @@ public class ABMVisualizer : MonoBehaviour
         Parallel.For(0, particles.Length, i => {
             particles[i].position = positions[i];
             particles[i].velocity = Vector3.zero;
-            particles[i].startSize = size;
-            particles[i].startColor = gradient.Evaluate(colors[i]);
+            particles[i].size = size;
+            particles[i].color = gradient.Evaluate(colors[i]);
         });
         ParticleSystem partSys = GetComponent<ParticleSystem>();
         partSys.SetParticles(particles, particles.Length);

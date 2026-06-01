@@ -1,96 +1,191 @@
-﻿/*
-DesignMind2: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
-Copyright (C) 2023-2026  michal Gath-Morad, Christoph Hölscher, Raphaël Baur, Leonel Aguilar
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>
-*/
-
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
 using UnityEngine.AI;
+using System.Linq;
+using EBD;
+using System.Globalization;
+using Trajectory = System.Collections.Generic.List<EBD.TrajectoryEntry>;
+using System;
 
 public class ProcessWalkthrough : MonoBehaviour
 {
     // Public variables.
     public LayerMask layerMask;
     public Gradient heatmapGradient;
-    public bool generateData = true;
-
-    // IO-related public variables.
-    public string inPathWalkthrough;
-    public string inPathHeatmapData;
-    public string outDirHeatmap;
-    public string outFileNameHeatmap;
-    public string outDirStatistic;
-    public string outFileNameStatistic;
 
     // Public variables concerned with the raycast.
     public float horizontalViewAngle = 90.0f;
     public float verticalViewAngle = 60.0f;
-    public int raysPerRaycast = 100;
+    public int numRaysPerRayCast = 100;
+    public int maxNumRays = 1000;
+    public int numRayCast = 0;
 
     // Private variables concerned with the raycast.
     private float outerConeRadiusHorizontal;
     private float outerConeRadiusVertical;
-    private float interSubconeDisplacement;
-    private float intraSubconeDisplacementAngle;
 
     // Visualization-related public variables.
     public float particleSize = 1.0f;
-    public float h = 1.0f;
+    public float kernelSize = 1.0f;
 
     public bool useAllFilesInDirectory = false;
-    public string rawDataDirectory = "VR_Data/Default";
-    public string rawDataFileName = "VR_Data/Default/default.csv";
+    public string rawDataDirectory = DefaultPaths.RawDataPath;
+    public string rawDataFileName = Path.Combine("Data", "VirtualWalkthrough", "Raw", "Walkthrough.csv");
     public string outProcessedDataFileName;
     public string outSummarizedDataFileName;
     public string inProcessedDataFileName;
-    public string inSummarizedDataFileName;
-    private List<Vector3> hits = new List<Vector3>();
-    private float[] colors;
-    private List<int[]> hitsPerLayer;
-    public bool visualizeHeatmap = false;
-    public bool visualizeTrajectory = false;
-    private Vector3[] particlePositions;
+    private List<float> kdeValues;
+    private Dictionary<string, int[]> hitsPerLayer;
+
+    // Whether the visual attention heatmap should be computed.
+    public bool isVisualAttentionEnabled = false;
+
+    // Whether the trajectories should be visualized.
+    public bool isTrajectoryVisEnabled = false;
+
+    // Whether the position heatmap should be computed (mutually exclusive with showVisualAttention).
+    public bool isDensityHeatmapEnabled = false;
+    public float densityHeatmapDelta = 1f;
+    public SerializableColorList densityHeatmapColors = new SerializableColorList();
+    private List<Vector3> particlePositions;
+    public bool singleColorPerTrajectory = false;
+    public SerializableColorList trajectoryColors = new SerializableColorList();
     public Gradient trajectoryGradient;
     public Gradient shortestPathGradient;
-    public bool visualizeShortestPath = false;
+    public bool isShortestPathVisEnabled = false;
     public bool inferStartLocation = true;
+    public bool inferEndLocation = true;
     public Transform startLocation;
     public Transform endLocation;
-    private List<Vector3[]> trajectoryPositions;
-    private List<Vector3[]> trajectoryForwardDirections;
-    private List<Vector3[]> trajectoryUpDirections;
-    private List<Vector3[]> trajectoryRightDirections;
-    private List<float[]> trajectoryTimes;
+
+    // Key:
+    // If not multipleTrials in one file, it is the filename of the raw data file.
+    // If multipleTrials in one file, it is the key created from concatenating the values of the key-columns.
+    private Dictionary<string, Trajectory> trajectories = new();
     public bool reuseHeatmap = false;
     public float pathWidth = 0.1f;
     private GameObject lineRendererParent;
-    private LineRenderer lineRenderer;
+    private Dictionary<string, LineRenderer> lineRenderer = new();
     private GameObject shortestPathLinerendererParent;
     private LineRenderer shortestPathLinerenderer;
-    private int numFiles;
     public Material lineRendererMaterial;
     public Material heatmapMaterial;
     private List<string> rawDataFileNames;
-    private char csvSep = ';';
-    public bool generateSummarizedDataFile;
-    private string prec = "F3";
+    public string csvDelimiter = ",";
+    public bool isDataSummaryEnabled;
+    private readonly string outputNumberFormat = "F3";
+    public bool showTrajectoryProgressively = false;
+    public float replayDuration = 10.0f;
+    public bool useQuaternion = false;
+
+    // Column names of the file to be parsed.
+    public string positionXColumnName = "PositionX";
+    public string positionYColumnName = "PositionY";
+    public string positionZColumnName = "PositionZ";
+    public string directionXColumnName = "DirectionX";
+    public string directionYColumnName = "DirectionY";
+    public string directionZColumnName = "DirectionZ";
+    public string upXColumnName = "UpX";
+    public string upYColumnName = "UpY";
+    public string upZColumnName = "UpZ";
+    public string rightXColumnName = "RightX";
+    public string rightYColumnName = "RightY";
+    public string rightZColumnName = "RightZ";
+    public string timeColumnName = "Time";
+    public string quaternionWColumnName = "QuaternionW";
+    public string quaternionXColumnName = "QuaternionX";
+    public string quaternionYColumnName = "QuaternionY";
+    public string quaternionZColumnName = "QuaternionZ";
+    public bool multipleTrialsInOneFile = false;
+
+    // This list contains the names of columns that constitute the key of a trial.
+    public SerializableStringList keyColumns = new();
+
+    // This list contains the names of columns that are used for filtering the data.
+    public List<SerializableStringList> filters = new();
+    private Dictionary<string, List<string>> filterDict = new();
 
     void Start()
     {
+        ValidateInputs();
+        Initialize();
+        ReadData();
+        if (isVisualAttentionEnabled)
+        {
+            VisualizeAttention();
+        }
+        if (isDensityHeatmapEnabled)
+        {
+            VisualizeDensityHeatmap();
+        }
+        if (isTrajectoryVisEnabled)
+        {
+            VisualizeTrajectory();
+        }
+        if (isDataSummaryEnabled)
+        {
+            WriteSummarizedDataFile();
+        }
+    }
+
+    void Update()
+    {
+        if (!isTrajectoryVisEnabled || !showTrajectoryProgressively)
+        {
+            return;
+        }
+        int trajectoryIndex = 0;
+        foreach (KeyValuePair<string, Trajectory> entry in trajectories)
+        {
+            List<Vector3> currPositions = entry.Value.Select(x => x.Position).ToList();
+            List<float> currTimes = entry.Value.Select(x => x.TimeStamp).ToList();
+            Visualization.RenderTrajectory(
+                lineRenderer: lineRenderer[entry.Key],
+                positions: currPositions.ToList(),
+                timesteps: Enumerable.Range(0, currPositions.Count()).Select(i => (float)i).ToList(),
+                currentTimeStep: Time.realtimeSinceStartup % replayDuration / replayDuration,
+                gradient: singleColorPerTrajectory ? null : trajectoryGradient,
+                color: singleColorPerTrajectory ? trajectoryColors.List[trajectoryIndex % trajectoryColors.List.Count] : default,
+                trajectoryWidth: pathWidth,
+                normalizeTime: true
+            );
+            trajectoryIndex++;
+        }
+    }
+
+    void ValidateInputs()
+    {
+        if (useAllFilesInDirectory && multipleTrialsInOneFile)
+        {
+            throw new Exception("Using multiple files and multiple trials in one file is not supported.");
+        }
+        // The total number of rays cannot be smaller than the number of rays per raycast.
+        if (numRaysPerRayCast > maxNumRays)
+        {
+            throw new Exception("numRaysPerRayCast must be smaller than maxNumRays.");
+        }
+
+        foreach (SerializableStringList filter in filters)
+        {
+            if (filter.List.Count < 2)
+            {
+                Debug.LogError("Each filter must have at least two elements. First element is the column name, the rest are the values to be filtered.");
+            }
+            filterDict.Add(filter.List[0], filter.List.Skip(1).ToList());
+        }
+
+        // Check that only one of showVisualAttention and showPositionHeatmap is set to true.
+        if (isVisualAttentionEnabled && isDensityHeatmapEnabled)
+        {
+            Debug.LogError("Only one of showVisualAttention and showPositionHeatmap can be set to true.");
+        }
+    }
+
+    void Initialize()
+    {
+        numRayCast = Mathf.CeilToInt((float)maxNumRays / numRaysPerRayCast);
+
         if (lineRendererMaterial == null)
         {
             lineRendererMaterial = new Material(Shader.Find("Sprites/Default"));  // Default material for linerenderer.
@@ -99,18 +194,19 @@ public class ProcessWalkthrough : MonoBehaviour
         {
             heatmapMaterial = new Material(Shader.Find("Particles/Priority Additive (Soft)")); // Default material for heatmap.
         }
+
+        // Initialize hitsPerLayer.
+        hitsPerLayer = new();
+
         // Set material of particle system.
         gameObject.GetComponent<ParticleSystemRenderer>().material = heatmapMaterial;
-        outerConeRadiusHorizontal = Mathf.Tan((horizontalViewAngle / 2.0f) * Mathf.Deg2Rad);
-        outerConeRadiusVertical = Mathf.Tan((verticalViewAngle / 2.0f) * Mathf.Deg2Rad);
-        hitsPerLayer = new List<int[]>();
-        trajectoryTimes = new List<float[]>();
-        trajectoryPositions = new List<Vector3[]>();
-        trajectoryForwardDirections = new List<Vector3[]>();
-        trajectoryUpDirections = new List<Vector3[]>();
-        trajectoryRightDirections = new List<Vector3[]>();
+        outerConeRadiusHorizontal = Mathf.Tan(horizontalViewAngle / 2.0f * Mathf.Deg2Rad);
+        outerConeRadiusVertical = Mathf.Tan(verticalViewAngle / 2.0f * Mathf.Deg2Rad);
+    }
 
-        // Create a list of filenames for the raw data files to be read. If <useAllFilesInDirectory> is false, then this
+    void ReadData()
+    {
+        // Create a list of filenames for the raw data files to be read. If `useAllFilesInDirectory` is false, then this
         // list will consist of only one file. Otherwise all files in that directory will be added.
         rawDataFileNames = new List<string>();
         if (useAllFilesInDirectory)
@@ -118,334 +214,140 @@ public class ProcessWalkthrough : MonoBehaviour
             // Read in all files in the directory.
             rawDataFileNames = new List<string>(Directory.GetFiles(rawDataDirectory, "*.csv"));
         }
-        else 
+        else
         {
             // Only get single file.
             rawDataFileNames.Add(rawDataFileName);
         }
 
-        numFiles = rawDataFileNames.Count;
-
-        // TODO: Remove after debug.
-        foreach (string fileName in rawDataFileNames)
-            Debug.Log(fileName);
-
         // Parse each file and populate the positions and direction arrays.
         foreach (string fileName in rawDataFileNames)
         {
-            (float[], Vector3[], Vector3[], Vector3[], Vector3[]) parsedData = ReadRawDataFile(fileName);
-            trajectoryTimes.Add(parsedData.Item1);
-            trajectoryPositions.Add(parsedData.Item2);
-            trajectoryForwardDirections.Add(parsedData.Item3);
-            trajectoryUpDirections.Add(parsedData.Item4);
-            trajectoryRightDirections.Add(parsedData.Item5);
-        }        
+            (List<string> columnNames, List<List<string>> data) = IO.ReadCSV(fileName, separator: csvDelimiter);
 
-        if (visualizeHeatmap)
-        {
-            if (reuseHeatmap)
+            // Filter data.
+            data = FilterData(columnNames, data, filters.Select(x => (x.List.First(), x.List.Skip(1).ToList())).ToList());
+
+            // Check that all required columns are present.
+            CheckColumns(columnNames);
+
+            // Parse the data and populate the positions and direction arrays.
+            foreach (List<string> row in data)
             {
-                LoadHeatMap();
+                // Create the key.
+                string key = multipleTrialsInOneFile ? CreateSuperKey(keyColumns.List, columnNames, row) : Path.GetFileName(fileName);
+                ParseRow(row, key, ref trajectories, columnNames);
             }
-            else
-            {
-                CreateHeatMap();
-                WriteProcessedDataFile();
-            }
-            CreateParticles();
         }
-        if (visualizeTrajectory)
+    }
+
+    void VisualizeAttention()
+    {
+        if (reuseHeatmap)
         {
-            foreach (Vector3[] currPositions in trajectoryPositions)
+            LoadHeatMap();
+        }
+        else
+        {
+            (particlePositions, kdeValues, hitsPerLayer) = VisualAttention.CreateHeatMap(
+                trajectories,
+                maxNumRays,
+                outerConeRadiusVertical,
+                outerConeRadiusHorizontal,
+                numRaysPerRayCast,
+                layerMask,
+                kernelSize
+            );
+            WriteProcessedDataFile();
+        }
+        ParticleSystem particleSystem = GetComponent<ParticleSystem>();
+        Visualization.SetupParticleSystem(particleSystem, particlePositions, kdeValues, heatmapGradient, particleSize);
+    }
+
+    void VisualizeDensityHeatmap()
+    {
+        List<Color> outColors;
+        (particlePositions, outColors) = DensityHeatmap.GenerateDensityHeatmap(
+            trajectories,
+            densityHeatmapColors.List,
+            densityHeatmapDelta,
+            kernelSize
+        );
+        ParticleSystem particleSystem = GetComponent<ParticleSystem>();
+        Visualization.SetupParticleSystem(particleSystem, particlePositions, outColors, particleSize);
+    }
+
+    void VisualizeTrajectory()
+    {
+        int trajectoryIndex = 0;
+        foreach (KeyValuePair<string, Trajectory> entry in trajectories)
+        {
+            List<Vector3> currPositions = entry.Value.Select(x => x.Position).ToList();
+            List<float> currTimes = entry.Value.Select(x => x.TimeStamp).ToList();
+            lineRendererParent = new GameObject { hideFlags = HideFlags.HideInHierarchy };
+            lineRenderer.Add(entry.Key, lineRendererParent.AddComponent<LineRenderer>());
+            Visualization.RenderTrajectory(
+                lineRenderer: lineRenderer[entry.Key],
+                positions: currPositions.ToList(),
+                timesteps: Enumerable.Range(0, currPositions.Count()).Select(i => (float)i).ToList(),
+                currentTimeStep: 1.0f,
+                gradient: singleColorPerTrajectory ? null : trajectoryGradient,
+                color: singleColorPerTrajectory ? trajectoryColors.List[trajectoryIndex % trajectoryColors.List.Count] : default,
+                trajectoryWidth: pathWidth,
+                normalizeTime: true,
+                normalizePosition: false
+            );
+            trajectoryIndex++;
+            if (isShortestPathVisEnabled)
             {
-                lineRendererParent = new GameObject();
-                lineRendererParent.hideFlags = HideFlags.HideInHierarchy;
-                lineRenderer = lineRendererParent.AddComponent<LineRenderer>();
-                VisualizeTrajectory(lineRenderer, new List<Vector3>(currPositions), trajectoryGradient, pathWidth);
-                if (visualizeShortestPath)
+                Vector3 startPos = inferStartLocation ? currPositions.First() : startLocation.position;
+                Vector3 endPos = inferEndLocation ? currPositions.Last() : endLocation.position;
+
+                // startPos and endPos do not necessarily lie on the NavMesh. Finding path between them might fail.
+                NavMesh.SamplePosition(startPos, out NavMeshHit startHit, 100.0f, NavMesh.AllAreas);  // Hardcoded to 100 units of maximal distance.
+                startPos = startHit.position;
+                NavMesh.SamplePosition(endPos, out NavMeshHit endHit, 100.0f, NavMesh.AllAreas);
+                endPos = endHit.position;
+
+                // Creating linerenderer for shortest path.
+                shortestPathLinerendererParent = new GameObject { hideFlags = HideFlags.HideInHierarchy };
+                shortestPathLinerenderer = shortestPathLinerendererParent.AddComponent<LineRenderer>();
+
+                // Create shortest path.
+                NavMeshPath navMeshPath = new NavMeshPath();
+                bool foundPath = NavMesh.CalculatePath(startPos, endPos, NavMesh.AllAreas, navMeshPath);
+                if (!foundPath)
                 {
-                    Vector3 startPos = inferStartLocation ? currPositions[0] : startLocation.position;
-                    Vector3 endPos = endLocation.position;
-
-                    // startPos and endPos do not necessarily lie on the NavMesh. Finding path between them might fail.
-                    NavMeshHit startHit;
-                    NavMesh.SamplePosition(startPos, out startHit, 100.0f, NavMesh.AllAreas);  // Hardcoded to 100 units of maximal distance.
-                    startPos = startHit.position;
-                    NavMeshHit endHit;
-                    NavMesh.SamplePosition(endPos, out endHit, 100.0f, NavMesh.AllAreas);
-                    endPos = endHit.position;
-
-                    // Creating linerenderer for shortest path.
-                    shortestPathLinerendererParent = new GameObject();
-                    shortestPathLinerendererParent.hideFlags = HideFlags.HideInHierarchy;
-                    shortestPathLinerenderer = shortestPathLinerendererParent.AddComponent<LineRenderer>();
-
-                    // Create shortest path.
-                    NavMeshPath navMeshPath = new NavMeshPath();
-                    NavMesh.CalculatePath(startPos, endPos, NavMesh.AllAreas, navMeshPath);
-                    VisualizeTrajectory(shortestPathLinerenderer, new List<Vector3>(navMeshPath.corners), shortestPathGradient, pathWidth);
+                    Debug.LogError("Shortest path could not be calculated. Have you baked the NavMesh?");
+                }
+                else
+                {
+                    Visualization.RenderTrajectory(
+                        lineRenderer: shortestPathLinerenderer,
+                        positions: navMeshPath.corners.ToList(),
+                        timesteps: Enumerable.Range(0, navMeshPath.corners.Length).Select(i => (float)i).ToList(),
+                        currentTimeStep: 1.0f,
+                        gradient: shortestPathGradient,
+                        trajectoryWidth: pathWidth,
+                        normalizeTime: true
+                    );
                 }
             }
         }
-
-        if (generateSummarizedDataFile)
-        {
-            WriteSummarizedDataFile();
-        }
     }
 
-    /* Converts string-representation of vector (in format of Vector3.ToString()) to Vector3.
-     * @param str       string representation of vector.
-     * @out             Vector3 representation of input string.
-     */
-    Vector3 str2Vec(string str)
-    {
-        str = str.Substring(1, str.Length - 2);
-        string[] substrs = str.Split(csvSep);
-        return new Vector3( float.Parse(substrs[0]), 
-                            float.Parse(substrs[1]), 
-                            float.Parse(substrs[2]));
-    }
-
-    /* Returns a set points corresponding to collisions of rays from a cone-shaped raycast.
-     * @param viewPoint         Vector corresponding to the view-point.
-     * @param forward           Vector corresponging to the direction of sight.
-     * @param vertical          Vector corresponding to the vertical axis of the cone.
-     * @param horizontal        Vector corresponding to the horizontal axis of the cone.
-     * @return                  List of vectors corresponding to the collisions of the cone-raycast with the environment.
-     */
-    private List<Vector3> CastAndCollide(Vector3 viewPoint, Vector3 forward, Vector3 vertical, Vector3 horizontal, ref int[] hitsPerLayer)
-    {
-        Vector3 hitPos = Vector3.zero;
-        List<Vector3> results = new List<Vector3>();
-        for (int i = 0; i < raysPerRaycast; i++)
-        {
-            Vector3 p = viewPoint
-                        + forward
-                        + vertical * Random.value * outerConeRadiusVertical * Mathf.Sin(2.0f * Mathf.PI * Random.value)
-                        + horizontal * Random.value * outerConeRadiusHorizontal * Mathf.Sin(2.0f * Mathf.PI * Random.value);
-            if (Collision(viewPoint, p - viewPoint, ref hitPos, ref hitsPerLayer))
-            {
-                results.Add(hitPos);
-            }
-        }
-
-        return results;
-    }
-
-    bool Collision(Vector3 start, Vector3 dir, ref Vector3 hitPos, ref int[] hitsPerLayer)
-    {
-        // If a hit occurs, this will hold all the information about it.
-        RaycastHit hit;
-
-        // Casting the ray and checking for collision.
-        if (!Physics.Raycast(start, dir, out hit))
-        {
-            return false;
-        }
-
-        
-        // The MeshCollider the ray hit. NULL-check.
-        MeshCollider meshCollider = hit.collider as MeshCollider;
-        if (meshCollider == null || meshCollider.sharedMesh == null)
-        {
-            return false;
-        }
-
-        // Check if it is in the desired layer.
-        if (!(layerMask == (layerMask | (1 << meshCollider.gameObject.layer))))
-        {
-            return false;
-        }
-        hitsPerLayer[meshCollider.gameObject.layer] += 1;
-        hitPos = hit.point;
-        return true;
-    }
-
-    /* Makes sure filename is unique and output directory exists.
-     * @param dirName       Name of directory.
-     * @param fileName      Proposed name of file.
-     * @param format        Format of file.
-     * @out                 Unique file-name.
-     */
-    string makeFileNameUnique(string dirName, string fileName, string format)
-    {
-        // Create directory if does not exist.
-        Directory.CreateDirectory(dirName);
-
-        // This is the path the file will be written to.
-        string path = dirName + Path.DirectorySeparatorChar + fileName + "." + format;
-        
-        // Check if specified file exists yet and if user wants to overwrite.
-        if (File.Exists(path))
-        {
-            /* In this case we need to make the filename unique.
-             * We will achiece that by:
-             * foldername + sep + filename + . + format -> foldername + sep + filename + _x + . format
-             * x will be increased in case of multiple overwrites.
-             */
-            
-            // Check if there was a previous overwrite and get highest identifier.
-            int id = 0;
-            while (File.Exists(dirName + Path.DirectorySeparatorChar + fileName + "_" + id.ToString() + "." + format))
-            {
-                id++;
-            }
-
-            // Now we have found a unique identifier and create the new name.
-            path = dirName + Path.DirectorySeparatorChar + fileName + "_" + id.ToString() + "." + format;
-        }
-        return path;
-    }
-
-    void CreateParticles() 
-    {
-        ParticleSystem.Particle[] particles = new ParticleSystem.Particle[particlePositions.Length];
-        for (int i = 0; i < particles.Length; i++)
-        {
-            particles[i].position = particlePositions[i];
-            particles[i].velocity = Vector3.zero;
-            particles[i].startSize = particleSize;
-            particles[i].startColor = heatmapGradient.Evaluate(colors[i]);
-        }
-        ParticleSystem partSys = GetComponent<ParticleSystem>();
-        partSys.SetParticles(particles, particles.Length);
-    }
-
-    void Update()
-    {
-        if (visualizeTrajectory)
-        {
-            /*
-            VisualizeTrajectory(lineRenderer, new List<Vector3>(trajectoryPositions), trajectoryGradient, pathWidth);
-            */
-        }
-    }
-
-    public string CreateDerivedDataFileName(string rawDataDirectory, string rawDataFileName, string type)
-    {
-        string dirName = new System.IO.DirectoryInfo(rawDataDirectory).Name;
-        if (useAllFilesInDirectory)
-        {
-            return "all_files_in_" + dirName + "_" + type + ".csv";
-        }
-        return dirName + "_" + Path.GetFileNameWithoutExtension(rawDataFileName) + "_" + type + Path.GetExtension(rawDataFileName);
-    }
-
-    private (float[], Vector3[], Vector3[], Vector3[], Vector3[]) ReadRawDataFile(string rawDataFileName)
-    {
-        // Reading in the data from a walkthough.
-        string[] data = File.ReadAllLines(rawDataFileName);
-
-        Vector3[] positions = new Vector3[data.Length];
-        Vector3[] forwardDirections = new Vector3[data.Length];
-        Vector3[] upDirections = new Vector3[data.Length];
-        Vector3[] rightDirections = new Vector3[data.Length];
-        float[] times = new float[data.Length];
-        for (int i = 0; i < data.Length; i++)
-        {
-            // Split string at comma.
-            string[] splitLine = data[i].Split(csvSep);
-            times[i] = float.Parse(splitLine[0]);
-            positions[i] = new Vector3(float.Parse(splitLine[1]), float.Parse(splitLine[2]), float.Parse(splitLine[3]));
-            forwardDirections[i] = new Vector3(float.Parse(splitLine[4]), float.Parse(splitLine[5]), float.Parse(splitLine[6]));
-            upDirections[i] = new Vector3(float.Parse(splitLine[7]), float.Parse(splitLine[8]), float.Parse(splitLine[9]));
-            rightDirections[i] = new Vector3(float.Parse(splitLine[10]), float.Parse(splitLine[11]), float.Parse(splitLine[12]));
-        }
-        return (times, positions, forwardDirections, upDirections, rightDirections);
-    }
-
-    private void CreateHeatMap()
-    {
-
-        // Will hold all the positions where the rays hit.
-        hits = new List<Vector3>();
-
-        // Unity generates 32 layers per default.
-        hitsPerLayer = new List<int[]>();
-
-        for (int i = 0; i < numFiles; i++)
-        {
-            Vector3[] currPositions = trajectoryPositions[i];
-            Vector3[] currForwardDirections = trajectoryForwardDirections[i];
-            Vector3[] currUpDirections = trajectoryUpDirections[i];
-            Vector3[] currRightDirections = trajectoryRightDirections[i];
-            int[] currHitsPerLayer = new int[32];  // Unity has 32 layers by default.
-            for (int j = 0; j < currPositions.Length; j++)
-            {
-                hits.AddRange(
-                    CastAndCollide(
-                        currPositions[j],
-                        currForwardDirections[j],
-                        currUpDirections[j],
-                        currRightDirections[j],
-                        ref currHitsPerLayer
-                    )
-                );
-            }
-            hitsPerLayer.Add(currHitsPerLayer);
-        }
-
-        int n = hits.Count;
-        
-        // Calculate the distances between each hit.
-        List<float> distances = new List<float>();
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                distances.Add(Vector3.Distance(hits[j], hits[i]));
-            }
-        }
-
-        float[] avgDistances = new float[hits.Count];
-        for (int i = 0; i < n; i++)
-        {
-            float avg = 0;
-            int offset = 0;
-            int C = 0;
-            for (int j = 1; j <= i; j++)
-            {
-                avg += Mathf.Exp(-distances[offset + i - j] / h);
-                offset += n - j;
-                C++;
-            }
-            for (int j = 0; j < n - i - 1; j++)
-            {
-                avg += Mathf.Exp(-distances[offset + j] / h);
-                C++;
-            }
-            avgDistances[i] = avg / (C * h);
-        }
-        float min = float.MaxValue;
-        float max = 0.0f;
-        for (int i = 0; i < n; i++)
-        {
-            min = avgDistances[i] < min ? avgDistances[i] : min;
-            max = avgDistances[i] > max ? avgDistances[i] : max;
-        }
-
-        float range = max - min;
-
-        colors = new float[hits.Count];
-        for (int i = 0; i < hits.Count; i++)
-        {
-            colors[i] = (avgDistances[i] - min) / range;
-        }
-        particlePositions = hits.ToArray();
-    }
-
+    // This function is probably defunct.
     private void LoadHeatMap()
     {
         // Reading in the heatmap-data from prior processing and creating arrays for positions and colors \in [0, 1].
         string[] allLines = File.ReadAllLines(inProcessedDataFileName);
-        particlePositions = new Vector3[allLines.Length];
-        colors = new float[allLines.Length];
+        particlePositions = new();
+        kdeValues = new List<float>();
         for (int i = 0; i < allLines.Length; i++)
         {
-            string[] line = allLines[i].Split(csvSep);
-            particlePositions[i] = new Vector3(float.Parse(line[0]), float.Parse(line[1]), float.Parse(line[2]));
-            colors[i] = float.Parse(line[3]);
+            string[] line = allLines[i].Split(csvDelimiter);
+            particlePositions.Add(new Vector3(float.Parse(line[0]), float.Parse(line[1]), float.Parse(line[2])));
+            kdeValues.Add(float.Parse(line[3]));
         }
     }
 
@@ -453,283 +355,317 @@ public class ProcessWalkthrough : MonoBehaviour
     {
         using (StreamWriter processedDataFile = new StreamWriter(outProcessedDataFileName))
         {
-            for (int i = 0; i < hits.Count; i++)
+            for (int i = 0; i < particlePositions.Count; i++)
             {
-                processedDataFile.WriteLine(hits[i].x + csvSep + hits[i].y +csvSep+ hits[i].z + colors[i]);
+                processedDataFile.WriteLine(particlePositions[i].x + csvDelimiter + particlePositions[i].y + csvDelimiter + particlePositions[i].z + csvDelimiter + kdeValues[i]);
             }
         }
     }
 
     private void WriteSummarizedDataFile()
     {
+        Debug.Log("Writing summarized data file.");
+        // Variables to be written out. One entry per trial id (or file name).
+        Dictionary<string, float> durations = new();
+        Dictionary<string, float> distances = new();
+        Dictionary<string, float> averageSpeeds = new();
+        Dictionary<string, float> shortestPathDistances = new();
+        Dictionary<string, float> surplusShortestPaths = new();
+        Dictionary<string, float> ratioShortestPaths = new();
+        Dictionary<string, int> successfuls = new();
 
-        // Variables to be written out.
-        List<float> durations = new List<float>();
-        List<float> distances = new List<float>();
-        List<float> averageSpeeds = new List<float>();
-        List<float> shortestPathDistances = new List<float>();
-        List<float> surplusShortestPaths = new List<float>();
-        List<float> ratioShortestPaths = new List<float>();
-        List<int> successfuls = new List<int>();
-        List<List<float>> viewPercentages = new List<List<float>>();
-
-        for (int i = 0; i < numFiles; i++)
+        foreach (KeyValuePair<string, Trajectory> entry in trajectories)
         {
+            Trajectory currTrajectory = entry.Value;
+
             // Duration of a walkthrough is the temporal difference between the last update step and the first.
-            durations.Add(trajectoryTimes[i][trajectoryTimes[i].Length - 1] - trajectoryTimes[i][0]);
-            Debug.Log($"Adding time: {trajectoryTimes[i][trajectoryTimes[i].Length - 1] - trajectoryTimes[i][0]}");
-        }
+            durations.Add(entry.Key, currTrajectory.Last().TimeStamp - currTrajectory.First().TimeStamp);
 
-        // Distances of user trajectory.
-        for (int i = 0; i < numFiles; i++)
-        {
             // Add up distances between measures time-points. Note that the resolution at which the time-points are 
             // recorded will make a difference.
             float currDistance = 0.0f;
-            for (int j = 0; j < trajectoryPositions[i].Length - 1; j++)
+            for (int j = 0; j < currTrajectory.Count - 1; j++)
             {
-                currDistance += Vector3.Distance(trajectoryPositions[i][j], trajectoryPositions[i][j + 1]);
+                currDistance += Vector3.Distance(currTrajectory[j].Position, currTrajectory[j + 1].Position);
             }
-            distances.Add(currDistance);
-            Debug.Log($"Adding distance: {currDistance}");
-        }
+            distances.Add(entry.Key, currDistance);
 
-        // Average speeds.
-        for (int i = 0; i < numFiles; i++)
-        {
-            averageSpeeds.Add(distances[i] / durations[i]);
-            Debug.Log($"Average speed: {distances[i] / durations[i]}");
-        }
+            averageSpeeds.Add(entry.Key, distances[entry.Key] / durations[entry.Key]);
 
-
-
-        // Shortest path distances.
-        for (int i = 0; i < numFiles; i++)
-        {
-            Vector3[] currPositions = trajectoryPositions[i];
-            Vector3 startPos = inferStartLocation ? currPositions[0] : startLocation.position;
-            Vector3 endPos = endLocation.position;
+            Vector3 startPos = inferStartLocation ? currTrajectory.First().Position : startLocation.position;
+            Vector3 endPos = inferEndLocation ? currTrajectory.Last().Position : endLocation.position;
 
             // startPos and endPos do not necessarily lie on the NavMesh. Finding path between them might fail.
-            NavMeshHit startHit;
-            NavMesh.SamplePosition(startPos, out startHit, 100.0f, NavMesh.AllAreas);  // Hardcoded to 100 units of maximal distance.
+            NavMesh.SamplePosition(startPos, out NavMeshHit startHit, 100.0f, NavMesh.AllAreas);  // Hardcoded to 100 units of maximal distance.
             startPos = startHit.position;
-            NavMeshHit endHit;
-            NavMesh.SamplePosition(endPos, out endHit, 100.0f, NavMesh.AllAreas);
+            NavMesh.SamplePosition(endPos, out NavMeshHit endHit, 100.0f, NavMesh.AllAreas);
             endPos = endHit.position;
 
             // Create shortest path.
             NavMeshPath navMeshPath = new NavMeshPath();
             NavMesh.CalculatePath(startPos, endPos, NavMesh.AllAreas, navMeshPath);
 
-            float currDistance = 0.0f;
-            for (int j = 0; j < navMeshPath.corners.Length - 1; j++) 
+            float currShortestPathDistance = 0.0f;
+            for (int j = 0; j < navMeshPath.corners.Length - 1; j++)
             {
-                currDistance += Vector3.Distance(navMeshPath.corners[j], navMeshPath.corners[j + 1]);
+                currShortestPathDistance += Vector3.Distance(navMeshPath.corners[j], navMeshPath.corners[j + 1]);
             }
 
-            shortestPathDistances.Add(currDistance);
-        }
+            shortestPathDistances.Add(entry.Key, currShortestPathDistance);
 
+            surplusShortestPaths.Add(entry.Key, distances[entry.Key] - shortestPathDistances[entry.Key]);
 
-        // Surplus distance to shortest path.
-        for (int i = 0; i < numFiles; i++)
-        {
-            surplusShortestPaths.Add(distances[i] - shortestPathDistances[i]);
-        }
+            ratioShortestPaths.Add(entry.Key, distances[entry.Key] / shortestPathDistances[entry.Key]);
 
-
-        // Ratio between user trajectory length and shortest path.
-        for (int i = 0; i < numFiles; i++)
-        {
-            ratioShortestPaths.Add(distances[i] / shortestPathDistances[i]);
-        }
-
-        
-
-        // Whether the run was successful.
-        for (int i = 0; i < numFiles; i++)
-        {
-            if (Vector3.Distance(trajectoryPositions[i][trajectoryPositions[i].Length - 1], endLocation.position) < 2.0f)
+            if (Vector3.Distance(currTrajectory.Last().Position, endPos) < 2.0f)
             {
-                successfuls.Add(1);
+                successfuls.Add(entry.Key, 1);
             }
             else
             {
-                successfuls.Add(0);
+                successfuls.Add(entry.Key, 0);
             }
         }
-
-        // Percentages of visibility.
-        for (int i = 0; i < numFiles; i++)
+        List<string> columnNames = new();
+        if (multipleTrialsInOneFile)
         {
-            int[] currHitsPerLayer = hitsPerLayer[i];
+            columnNames.AddRange(keyColumns.List);
+        }
+        else
+        {
+            columnNames.Add("TrialID");
+        }
+        columnNames.AddRange(new List<string> {
+                "Duration",
+                "Distance",
+                "AverageSpeed",
+                "ShortestPathDistance",
+                "SurplusShortestPath",
+                "RatioShortestPath",
+                "Successful"
+        });
 
-            // Determine the total number of hits.
-            int totalHits = 0;
-            for (int j = 0; j < currHitsPerLayer.Length; j++)
-            {
-                Debug.Log(currHitsPerLayer[j]);
-                totalHits += currHitsPerLayer[j];
-            }
-
-            List<float> currHitPercentages = new List<float>();
-            for (int j = 0; j < currHitsPerLayer.Length; j++)
-            {
-                currHitPercentages.Add((float) currHitsPerLayer[j] / totalHits);
-            }
-            viewPercentages.Add(currHitPercentages);
+        // Find names of all the Unity layers.
+        for (int i = 0; i < 32; i++)
+        {
+            columnNames.Add(LayerMask.LayerToName(i));
         }
 
-
-        bool isHead = true;  // Indicates whether the current line is a header.
-        using (StreamWriter summaryDataFile = new StreamWriter(outSummarizedDataFileName))
+        List<List<string>> data = new();
+        Dictionary<string, int> totalHitsPerLayer = new();
+        foreach (KeyValuePair<string, int[]> entry in hitsPerLayer)
         {
-            if (isHead)
+            totalHitsPerLayer[entry.Key] = isVisualAttentionEnabled ? entry.Value.Sum() : -1;
+        }
+        foreach (KeyValuePair<string, float> entry in durations)
+        {
+            List<string> row = new();
+            if (multipleTrialsInOneFile)
             {
-                // Generate header.
-                string header = "RawDataFileName" + csvSep;
-                header += "Duration" + csvSep;
-                header += "Distance" + csvSep;
-                header += "AverageSpeed" + csvSep;
-                header += "ShortestPathDistance" + csvSep;
-                header += "SurplusShortestPath" + csvSep;
-                header += "RatioShortestPath" + csvSep;
-                header += "Successful" + csvSep;
+                row.AddRange(DeconstructSuperKey(entry.Key).Item2);
+            }
+            else
+            {
+                row.Add(entry.Key);
+            }
+            row.AddRange(new List<string> {
+                durations[entry.Key].ToString(outputNumberFormat, CultureInfo.InvariantCulture),
+                distances[entry.Key].ToString(outputNumberFormat, CultureInfo.InvariantCulture),
+                averageSpeeds[entry.Key].ToString(outputNumberFormat, CultureInfo.InvariantCulture),
+                shortestPathDistances[entry.Key].ToString(outputNumberFormat, CultureInfo.InvariantCulture),
+                surplusShortestPaths[entry.Key].ToString(outputNumberFormat, CultureInfo.InvariantCulture),
+                ratioShortestPaths[entry.Key].ToString(outputNumberFormat, CultureInfo.InvariantCulture),
+                successfuls[entry.Key].ToString(outputNumberFormat, CultureInfo.InvariantCulture)
+            });
 
-                // For each layer, generate a header.
-                for (int i = 0; i < hitsPerLayer[0].Length - 1; i++)
+            for (int j = 0; j < 32; j++)
+            {
+                if (isVisualAttentionEnabled)
                 {
-                    header += LayerMask.LayerToName(i) + csvSep;
+                    int numHits = hitsPerLayer[entry.Key][j];
+                    int numTotalHits = totalHitsPerLayer[entry.Key];
+                    row.Add(((float)numHits / numTotalHits).ToString(outputNumberFormat, CultureInfo.InvariantCulture));
                 }
-
-                // Last element should be followed by comma, thus breaking off.
-                header += LayerMask.LayerToName(hitsPerLayer[0].Length - 1);
-                isHead = false;  // Set head to false, such that head will not be generated in the following iterations.
-                summaryDataFile.WriteLine(header);
-            }
-            
-            // Write data for each file.
-            for (int i = 0; i < numFiles; i++)
-            {
-                // Generate normal line.
-                string line = "";
-                line += Path.GetFileNameWithoutExtension(rawDataFileNames[i]) + csvSep;
-                line += durations[i].ToString(prec) + csvSep;
-                line += distances[i].ToString(prec) + csvSep;
-                line += averageSpeeds[i].ToString(prec) + csvSep;
-                line += shortestPathDistances[i].ToString(prec) + csvSep;
-                line += surplusShortestPaths[i].ToString(prec) + csvSep;
-                line += ratioShortestPaths[i].ToString(prec) + csvSep;
-                line += successfuls[i].ToString(prec) + csvSep;
-                for (int j = 0; j < viewPercentages[i].Count - 1; j++)
+                else
                 {
-                    line += viewPercentages[i][j].ToString(prec) + csvSep;
+                    row.Add("not computed");
                 }
-                line += viewPercentages[i][viewPercentages[i].Count - 1].ToString(prec);
-                summaryDataFile.WriteLine(line);
             }
+            data.Add(row);
         }
+        IO.WriteCSV(outSummarizedDataFileName, columnNames, data, csvDelimiter);
     }
 
-    private void VisualizeTrajectory(LineRenderer lineRenderer, List<Vector3> positions, Gradient gradient, float trajectoryWidth)
+    private void ParseRow(
+        List<string> row,
+        string key,
+        ref Dictionary<string, Trajectory> trajectories,
+        List<string> columnNames
+    )
     {
-        lineRenderer.colorGradient = gradient;
-        lineRenderer.material = lineRendererMaterial;
-        lineRenderer.widthMultiplier = trajectoryWidth;
-        lineRenderer.positionCount = positions.Count;
-        lineRenderer.SetPositions(positions.ToArray());
+
+        // If we have not seen the trial before, we create a new trajectroy.
+        if (!trajectories.ContainsKey(key))
+        {
+            trajectories.Add(key, new Trajectory());
+        }
+
+        // Construct a new trajectory entry.
+        float currTime = float.Parse(row[columnNames.IndexOf(timeColumnName)], CultureInfo.InvariantCulture);
+        Vector3 currPosition = new(
+            float.Parse(row[columnNames.IndexOf(positionXColumnName)], CultureInfo.InvariantCulture),
+            float.Parse(row[columnNames.IndexOf(positionYColumnName)], CultureInfo.InvariantCulture),
+            float.Parse(row[columnNames.IndexOf(positionZColumnName)], CultureInfo.InvariantCulture)
+        );
+        Vector3 currForwardDirection;
+        Vector3 currUpDirection;
+        Vector3 currRightDirection;
+        if (useQuaternion)
+        {
+            Quaternion currQuaternion = new(
+                float.Parse(row[columnNames.IndexOf(quaternionWColumnName)], CultureInfo.InvariantCulture),
+                float.Parse(row[columnNames.IndexOf(quaternionXColumnName)], CultureInfo.InvariantCulture),
+                float.Parse(row[columnNames.IndexOf(quaternionYColumnName)], CultureInfo.InvariantCulture),
+                float.Parse(row[columnNames.IndexOf(quaternionZColumnName)], CultureInfo.InvariantCulture)
+            );
+            currForwardDirection = currQuaternion * Vector3.forward;
+            currUpDirection = currQuaternion * Vector3.up;
+            currRightDirection = currQuaternion * Vector3.right;
+        }
+        else
+        {
+            currForwardDirection = new Vector3(
+                float.Parse(row[columnNames.IndexOf(directionXColumnName)], CultureInfo.InvariantCulture),
+                float.Parse(row[columnNames.IndexOf(directionYColumnName)], CultureInfo.InvariantCulture),
+                float.Parse(row[columnNames.IndexOf(directionZColumnName)], CultureInfo.InvariantCulture)
+            );
+            currUpDirection = new Vector3(
+                float.Parse(row[columnNames.IndexOf(upXColumnName)], CultureInfo.InvariantCulture),
+                float.Parse(row[columnNames.IndexOf(upYColumnName)], CultureInfo.InvariantCulture),
+                float.Parse(row[columnNames.IndexOf(upZColumnName)], CultureInfo.InvariantCulture)
+            );
+            currRightDirection = new Vector3(
+                float.Parse(row[columnNames.IndexOf(rightXColumnName)], CultureInfo.InvariantCulture),
+                float.Parse(row[columnNames.IndexOf(rightYColumnName)], CultureInfo.InvariantCulture),
+                float.Parse(row[columnNames.IndexOf(rightZColumnName)], CultureInfo.InvariantCulture)
+            );
+        }
+
+        // Add the new entry to the trajectory.
+        trajectories[key].Add(new TrajectoryEntry
+        {
+            Position = currPosition,
+            ForwardDirection = currForwardDirection,
+            UpDirection = currUpDirection,
+            RightDirection = currRightDirection,
+            TimeStamp = currTime
+        });
     }
 
-    private Mesh CreateTrajectoryMesh(Vector3[] positions, Vector3[] upDirections, Vector3[] rightDirections, int resolution, float thickness)
+    private void CheckColumns(List<string> columns)
     {
-        int numPos = positions.Length;
-        float radIncrement = 2 * Mathf.PI / resolution;
+        List<string> requiredColumns = new() {
+            positionXColumnName,
+            positionYColumnName,
+            positionZColumnName,
+            timeColumnName,
+        };
 
-        // For each position in the trajectory, we create a surrounding ring of <resolution> vertices.
-        Vector3[] vertices = new Vector3[numPos * resolution];
-        Vector3[] normals = new Vector3[numPos * resolution];
-        Color[] colors = new Color[numPos * resolution];
-
-        // Calculate maximal distance between timesteps.
-        float maxDist = 0.0f;
-        for (int i = 0; i < numPos - 1; i++)
+        if (useQuaternion)
         {
-            float currDist = Vector3.Distance(positions[i + 1], positions[i]);
-            maxDist = currDist > maxDist ? currDist : maxDist;
+            requiredColumns.AddRange(new List<string> {
+                quaternionWColumnName,
+                quaternionXColumnName,
+                quaternionYColumnName,
+                quaternionZColumnName
+            });
+        }
+        else
+        {
+            requiredColumns.AddRange(new List<string> {
+                directionXColumnName,
+                directionYColumnName,
+                directionZColumnName,
+                upXColumnName,
+                upYColumnName,
+                upZColumnName,
+                rightXColumnName,
+                rightYColumnName,
+                rightZColumnName
+            });
         }
 
-        Color currColor = Color.black; // Initialize as black.
-
-        for (int i = 0; i < numPos; i++)
+        if (multipleTrialsInOneFile)
         {
-            Vector3 currPos = positions[i];
-            Vector3 currRight = rightDirections[i];
-            Vector3 currUp = upDirections[i];
-
-            if (i >= 1 && i < numPos - 1)
-            {
-                // Averaged direction of segments adjacent to current position.
-                Vector3 lastDir = positions[i] - positions[i - 1];
-                Vector3 nextDir = positions[i + 1] - positions[i];
-                Vector3 ringPlaneNormal = (lastDir + nextDir) / 2;
-
-                // Project right vector and up vector onto this new plane.
-                currRight = Vector3.Normalize(Vector3.ProjectOnPlane(currRight, ringPlaneNormal));
-                currUp = Vector3.Normalize(Vector3.ProjectOnPlane(currUp, ringPlaneNormal));
-            }
-
-            if (i < numPos - 1)
-            {
-                currColor = trajectoryGradient.Evaluate(Vector3.Distance(positions[i + 1], positions[i]) / maxDist);
-            }
-
-            // The surrounding ring lies on the plane spanned by the up and right vectors.
-            for (int j = 0; j < resolution; j++)
-            {
-                Vector3 vertex = positions[i] + thickness * Mathf.Cos(radIncrement * j) * currRight + thickness * Mathf.Sin(radIncrement * j) * currUp;
-                normals[i * resolution + j] = Mathf.Cos(radIncrement * j) * currRight + Mathf.Sin(radIncrement * j) * currUp;
-                Debug.DrawRay(vertex, 0.1f * normals[i * resolution + j], Color.blue, 120.0f);
-                vertices[i * resolution + j] = vertex;
-                colors[i * resolution + j] = currColor;
-            }
+            requiredColumns.AddRange(keyColumns.List);
         }
 
-        // The forward triangles:
-        int[] triangles = new int[(numPos - 1) * (resolution - 1) * 2 * 3];
-        int triIdx = 0;
-        for (int i = 0; i < numPos - 1; i++)
+        foreach (string requiredColumn in requiredColumns)
         {
-            for (int j = 0; j < resolution - 1; j++)
+            if (!columns.Contains(requiredColumn))
             {
-                triangles[triIdx * 3] = i * resolution + j;
-                triangles[triIdx * 3 + 1] = i * resolution + j + 1;
-                triangles[triIdx * 3 + 2] = (i + 1) * resolution + j;
-                triIdx++;
+                throw new Exception($"Column {requiredColumn} not found in data file. Possible columns are: {string.Join(", ", columns)}");
             }
         }
-
-        // The backward triangles:
-        for (int i = 1; i < numPos; i++)
-        {
-            for (int j = 1; j < resolution; j++)
-            {
-                triangles[triIdx * 3] = i * resolution + j;
-                triangles[triIdx * 3 + 1] = i * resolution + j - 1;
-                triangles[triIdx * 3 + 2] = (i - 1) * resolution + j;
-                triIdx++;
-            }
-        }
-
-        Mesh mesh = new Mesh();
-        GameObject go = new GameObject();
-        go.AddComponent<MeshFilter>();
-        go.GetComponent<MeshFilter>().mesh = mesh;
-        mesh.vertices = vertices;
-        mesh.triangles = triangles;
-        mesh.normals = normals;
-        mesh.colors = colors;
-        go.AddComponent<MeshRenderer>();
-        return mesh;
     }
+
+    private List<List<string>> FilterData(
+        List<string> columnNames,
+        List<List<string>> data,
+        List<(string, List<string>)> filters
+    )
+    {
+        List<List<string>> filteredData = new();
+
+        // Go through each row and check if the row satisfies all filters.
+        foreach (List<string> row in data)
+        {
+            bool satisfiesAllFilters = true;
+            foreach ((string columnName, List<string> filterValues) in filters)
+            {
+                if (!filterValues.Contains(row[columnNames.IndexOf(columnName)]))
+                {
+                    satisfiesAllFilters = false;
+                    break;
+                }
+            }
+            if (satisfiesAllFilters)
+            {
+                filteredData.Add(row);
+            }
+        }
+        return filteredData;
+    }
+
+    private string CreateSuperKey(
+        List<string> keyColumns,
+        List<string> columnNames,
+        List<string> row,
+        char separator = ':'
+    )
+    {
+        List<string> keyValues = keyColumns.Select(x => row[columnNames.IndexOf(x)]).ToList();
+        List<string> superKeyComps = keyValues.Zip(keyColumns, (x, y) => $"{y}={x}").ToList();
+        return string.Join(separator, superKeyComps);
+    }
+
+    private (List<string>, List<string>) DeconstructSuperKey(string superKey, char separator = ':')
+    {
+        List<string> keyComponents = superKey.Split(separator).ToList();
+        List<string> keyColumns = keyComponents.Select(x => x.Split("=")[0]).ToList();
+        List<string> keyValues = keyComponents.Select(x => x.Split("=")[1]).ToList();
+        return (keyColumns, keyValues);
+    }
+}
+
+[Serializable]
+public class SerializableStringList
+{
+    public List<string> List;
+}
+
+[Serializable]
+public class SerializableColorList
+{
+    public List<Color> List;
 }

@@ -16,6 +16,8 @@ using UnityEngine;
 
 #if UBIQ_PRESENT
 using Ubiq.Messaging;
+using Ubiq.Rooms;
+using Ubiq.Networking;
 #endif
 
 namespace Assets.Scripts
@@ -74,24 +76,30 @@ namespace Assets.Scripts
         public void BroadcastTrialStart(int targetId, string materialName)
         {
 #if UBIQ_PRESENT
-            var msg = new SyncMessage { type = "start", targetId = targetId, materialName = materialName };
-            context.Send(JsonUtility.ToJson(msg));
+            // 核心修复：改用 bool 标志判断
+            if (isNetworkActive)
+            {
+                var msg = new SyncMessage { type = "start", targetId = targetId, materialName = materialName };
+                context.Send(JsonUtility.ToJson(msg));
+            }
+            else
+            {
+                Debug.LogWarning("[TrialSyncManager] 网络未就绪，正在以单机模式启动任务。");
+            }
 #endif
             ApplyTrialStart(targetId, materialName);
         }
 
-        /// <summary>
-        /// Called by Target when the local player reaches the goal.
-        /// Broadcasts to all peers, then applies locally.
-        /// Only the first call per trial has any effect; subsequent calls
-        /// (e.g. from a second peer reaching the target) are ignored.
-        /// </summary>
         public void BroadcastTrialEnd()
         {
             if (!isTrialActive) return;
 #if UBIQ_PRESENT
-            var msg = new SyncMessage { type = "end" };
-            context.Send(JsonUtility.ToJson(msg));
+            // 核心修复：改用 bool 标志判断
+            if (isNetworkActive)
+            {
+                var msg = new SyncMessage { type = "end" };
+                context.Send(JsonUtility.ToJson(msg));
+            }
 #endif
             ApplyTrialEnd();
         }
@@ -101,10 +109,9 @@ namespace Assets.Scripts
         // ---------------------------------------------------------------------
 
 #if UBIQ_PRESENT
-        protected override void ProcessMessage(ReferenceCountedSceneGraphMessage message)
+        public override void ProcessMessage(ReferenceCountedSceneGraphMessage message)
         {
-            var msg = JsonUtility.FromJson<SyncMessage>(message.ToString());
-            switch (msg.type)
+            var msg = JsonUtility.FromJson<SyncMessage>(message.ToString());            switch (msg.type)
             {
                 case "start": ApplyTrialStart(msg.targetId, msg.materialName); break;
                 case "end":   ApplyTrialEnd();                                 break;

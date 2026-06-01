@@ -1,6 +1,6 @@
 ﻿/*
-DesignMind2: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
-Copyright (C) 2023-2026  michal Gath-Morad, Christoph Hölscher, Raphaël Baur, Leonel Aguilar
+DesignMind: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
+Copyright (C) 2023  michal Gath-Morad, Christoph Hölscher, Raphaël Baur
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -99,11 +99,9 @@ public class POIMarkerScript : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-    #if UNITY_EDITOR
         for (int i = 0; i < textMeshParents.Count; i++) {
             textMeshes[i].transform.rotation = Quaternion.LookRotation(textMeshes[i].transform.position - SceneView.lastActiveSceneView.camera.transform.position);
         }
-    #endif
     }
 
     // Identifies the roles this POI takes 
@@ -167,5 +165,4 @@ public class POIMarkerScript : MonoBehaviour
         return displayTexts;
     }
 }
-
 

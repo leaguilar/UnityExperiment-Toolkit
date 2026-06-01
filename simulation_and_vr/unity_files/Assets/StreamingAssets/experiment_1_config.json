@@ -1,0 +1,8 @@
+{
+  "experimentId": "experiment_1",
+  "requiredParticipants": 2,
+  "countdownSeconds": 5,
+  "nextSceneName": "ExperimentalZhuo",
+  "dataAssemblyUrl": "http://localhost:8080",
+  "buildFolder": "WebGLBuild"
+}

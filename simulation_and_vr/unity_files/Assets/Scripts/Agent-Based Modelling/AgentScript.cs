@@ -1,6 +1,6 @@
 ﻿/*
-DesignMind2: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
-Copyright (C) 2023-2026  michal Gath-Morad, Christoph Hölscher, Raphaël Baur, Leonel Aguilar
+DesignMind: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
+Copyright (C) 2023  michal Gath-Morad, Christoph Hölscher, Raphaël Baur
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -51,14 +51,12 @@ public class AgentScript : MonoBehaviour
     private Color agentColor;                       // Color of this specific agent.
 
     // Technical stuff.
-    //private int failSave = 100;                     // Upper bound on the retries in a while loop to avoid infinity-loop.
-    private float displacementInterval = 10.0f;      // After how many seconds should we change the agents position a bit to avoid deadlock.
+    private int failSave = 100;                     // Upper bound on the retries in a while loop to avoid infinity-loop.
+    private float displacementInterval = 2.0f;      // After how many seconds should we change the agents position a bit to avoid deadlock.
     private float displacement = 0.1f;              // In this range the x and z component of the deplacement-vector will be chosen.
-    public float lastDisplacementTime;                 // Last time the agent was displaced.
+    private float lastDisplacement;                 // Last time the agent was displaced.
     private float displacementDelta = 0.1f;         // Length of the vector that the agents needs to have travelled to not be displaced.
     public List<Vector3> trajectory;                // A list of past positions of the agent, constituting the trajectories.
-    private float sampleInterval;                   // Interval that needs to pass until new location gets sampled.
-    private float lastSample;                       // Last time a sample was taken.
     private Vector3 firstPos;                       // First position in simulation.
 
     // State of the agent.
@@ -93,7 +91,7 @@ public class AgentScript : MonoBehaviour
         agentSpeed = task.agentSpeed;
 
         // Initializing technical stuff.
-        lastDisplacementTime=Time.realtimeSinceStartup;
+        lastDisplacement = Time.realtimeSinceStartup;
         trajectory = new List<Vector3>();
 
         // Initializing the state of the agent.
@@ -135,6 +133,7 @@ public class AgentScript : MonoBehaviour
         lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
         lineRenderer.colorGradient = gradient;
         lineRenderer.positionCount = traceLength;
+        lineRenderer.widthMultiplier = 0.5f;
         Vector3[] startArray = new Vector3[traceLength];
         for (int i = 0; i < traceLength; i++) {
             startArray[i] = transform.position;
@@ -149,19 +148,16 @@ public class AgentScript : MonoBehaviour
 
     void Update()
     {
-         // Remembering current position and attempt to displace to avoid deadlock (only if the agents has travelled at least one update).
+        // Remembering current position and attempt to displace to avoid deadlock (only if the agents has travelled at least one update).
         trajectory.Add(transform.position);
         if (trajectory.Count > 1) {
             displace();
         }
 
-        //Debug.Log("### "+showState());
-
-        //TODO
         // Visualize trajectories.
-        //if (visualizeTrajectories) {
-        //    visualizeTrajectory();
-        //}
+        if (visualizeTrajectories) {
+            visualizeTrajectory();
+        }
 
         // State: Agent is currently choosing a new point of interest.
         if (choosingPOI) {
@@ -177,16 +173,15 @@ public class AgentScript : MonoBehaviour
                 // are not necessarily placed on NavMesh.
                 Vector3 startPos = ClosestPointOnNavMesh(transform.position);
                 Vector3 endPos = ClosestPointOnNavMesh(POIs[currPOI].transform.position);
-                //Debug.Log("$$ CALCULATING PATH");
+
                 if (!NavMesh.CalculatePath(startPos, endPos, NavMesh.AllAreas, path))
                 {
                     throw new System.Exception($"No valid path was found to POI {currPOI}");
                 }
 
-                // TODO
-                //if (visualizePaths) {
-                //    visualizePath(path);
-                //}
+                if (visualizePaths) {
+                    visualizePath(path);
+                }
                 // Setting the new path of the agent.
                 navMeshAgent.path = path;
                 choosingPOI = false;
@@ -196,14 +191,11 @@ public class AgentScript : MonoBehaviour
             // Else we have fulfilled all needs and we can set the end as target.
             else {
                 NavMeshPath path = new NavMeshPath();
-                //Debug.Log("@@@#")
                 GameObject chosenEnd = end[Random.Range(0, end.Length)];
-                //Debug.Log("## CALCULATING PATH");
                 while (!navMeshAgent.CalculatePath(chosenEnd.transform.position, path)) {
                     throw new System.Exception(task.name + ": End is not located properly. Please readjust its position.");
                 }
-                // TODO
-                //visualizePath(path);
+                visualizePath(path);
                 navMeshAgent.path = path;
                 choosingPOI = false;
                 taskCompleted = true;
@@ -215,7 +207,6 @@ public class AgentScript : MonoBehaviour
             
             // Has completed the search.
             if (hasArrivedAtPOI()) {
-                //Debug.Log("@@@ ARRIVED ");
                 arrivalTime = Time.realtimeSinceStartup;
                 findingPOI = false;
                 fulfillingNeed = true;
@@ -240,7 +231,6 @@ public class AgentScript : MonoBehaviour
                 destroyRequest = true;
             }
         }
-
     }
 
     // Returns the index of the next point of interest.
@@ -284,17 +274,15 @@ public class AgentScript : MonoBehaviour
         bool c1 = !navMeshAgent.pathPending;
 
         // The remaining path is shorter than the epsilon-distance to the target.
-        bool c2 = navMeshAgent.remainingDistance <= navMeshAgent.stoppingDistance + 0.5; //TODO hacky way to make it stop at most at 0.5m 
+        bool c2 = navMeshAgent.remainingDistance <= navMeshAgent.stoppingDistance;
 
         // The agent has no path.
         bool c3 = !navMeshAgent.hasPath;
 
         // The agent velocity is zero.
         bool c4 = navMeshAgent.velocity.sqrMagnitude == 0;
-        //Debug.Log("$$ "+navMeshAgent.remainingDistance+" | "+navMeshAgent.stoppingDistance);
-        //Debug.Log("$$ c1 "+c1+" c2 "+c2+" c3 "+c3+" c4 "+c4);
 
-        return c1 && c2; // && (c3 || c4);
+        return c1 && c2 && (c3 || c4);
     }
 
     // Checks if agent has fulfilled need.
@@ -325,13 +313,13 @@ public class AgentScript : MonoBehaviour
     private void displace() {
 
         // Enough time has passed such that we can attempt displacment.
-        if (Time.realtimeSinceStartup >= lastDisplacementTime + displacementInterval) {
+        if (Time.realtimeSinceStartup >= lastDisplacement + displacementInterval) {
             GetComponent<NavMeshAgent>().avoidancePriority = Random.Range(0, 99);
             // But only if the distance to the last position is small enough and the agent is not currently fulfilling its needs.
             if (Vector3.Distance(trajectory[trajectory.Count - 2], trajectory[trajectory.Count - 1]) < displacementDelta && !fulfillingNeed) {
 
                 // Set the last time the agent was displaced to now.
-                lastDisplacementTime = Time.realtimeSinceStartup;
+                lastDisplacement = Time.realtimeSinceStartup;
 
                 // Add a randomized vector on the x-z plane.
                 transform.position += new Vector3(Random.value * displacement, 0.0f, Random.value * displacement);

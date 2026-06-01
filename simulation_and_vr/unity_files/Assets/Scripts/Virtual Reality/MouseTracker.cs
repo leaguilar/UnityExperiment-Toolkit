@@ -1,22 +1,4 @@
-﻿/*
-DesignMind2: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
-Copyright (C) 2023-2026  michal Gath-Morad, Christoph Hölscher, Raphaël Baur, Leonel Aguilar
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>
-*/
-
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -25,20 +7,21 @@ using UnityEngine;
  */
 public class MouseTracker : MonoBehaviour
 {
-    
+    [Tooltip("How fast is your player reacting to mouse-movement.")]
     public float mouseSensitivity = 100.0f;        // How fast is your player reacting to mouse-movement.
+    [Tooltip("The body of the character.")]
     public Transform playerBody;                    // The body of the character.
+    [Tooltip("How far back can the character tilt its head back (degrees).")]
     public float maxDorsal = 60.0f;                 // How far back can the character tilt its head back.
+    [Tooltip("How far forward can the character tilt its head forward (degrees).")]
     public float maxVentral = 60.0f;                // How far forward can the character tilt its head forward.
-    
-    public bool isLocalPlayer = true;               // Set to false for remote players (e.g. Ubiq peers).
-
+    internal bool isLocalPlayer;
     private float xRotation = 0.0f;                 // The current tilt of the head.
 
     // Start is called before the first frame update
     void Start()
     {
-        if (isLocalPlayer)
+        if (enabled)
         {
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
@@ -48,8 +31,6 @@ public class MouseTracker : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        if (!isLocalPlayer)
-            return;
 
         // Get the current position of mouse and scale it appropriately.
         float mouseX = Input.GetAxisRaw("Mouse X") * mouseSensitivity * Time.deltaTime;
@@ -61,6 +42,6 @@ public class MouseTracker : MonoBehaviour
 
         // Transform the character according to previous changes.
         transform.localRotation = Quaternion.Euler(xRotation, 0.0f, 0.0f);
-        playerBody.Rotate(Vector3.up * mouseX);
+        playerBody.Rotate(Vector3.up * mouseX);        
     }
 }

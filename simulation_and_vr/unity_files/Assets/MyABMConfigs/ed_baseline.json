@@ -1,0 +1,45 @@
+{
+  "Scene": "ed_baseline",
+  "simId": 1,
+  "sampleNum": 0,
+  "Scenario": "baseline",
+  "Purpose": "ED_Factorial_Study",
+  "tasks": [
+    {
+      "taskName": "Nurse_Workflow",
+      "agentType": "Nurse",
+      "numberOfAgents": 3,
+      "spawnInterval": 5,
+      "start": "SpawnPoints",
+      "end": "Exit Points",
+      "pointsOfInterest": "Computer_01, Computer_02, Computer_03, Nurse Station, Bed_01, Bed_02, Bed_03",
+      "numberOfNeeds": 4,
+      "revisit": false,
+      "chooseNonDeterministically": false,
+      "poiTime": 8,
+      "agentSpeed": 1.2,
+      "agentSize": 0.8,
+      "agentRadius": 0.3,
+      "privacyRadius": 1.2,
+      "taskColor": "cyan"
+    },
+    {
+      "taskName": "Doctor_Workflow",
+      "agentType": "Doctor",
+      "numberOfAgents": 2,
+      "spawnInterval": 10,
+      "start": "Workstations",
+      "end": "Workstations",
+      "pointsOfInterest": "Bed_01, Bed_02, Bed_03, Computer_01, Computer_02, Computer_03",
+      "numberOfNeeds": 3,
+      "revisit": true,
+      "chooseNonDeterministically": true,
+      "poiTime": 15,
+      "agentSpeed": 1.0,
+      "agentSize": 0.8,
+      "agentRadius": 0.3,
+      "privacyRadius": 1.5,
+      "taskColor": "magenta"
+    }
+  ]
+}

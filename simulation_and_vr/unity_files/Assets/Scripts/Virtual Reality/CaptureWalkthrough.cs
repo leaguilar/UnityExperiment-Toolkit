@@ -1,33 +1,16 @@
-﻿/*
-DesignMind2: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
-Copyright (C) 2023-2026  michal Gath-Morad, Christoph Hölscher, Raphaël Baur, Leonel Aguilar
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>
-*/
-#if UNITY_EDITOR
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
-using System.Linq;
 using UnityEditor;
+using System.Globalization;
+using EBD;
+
 public class CaptureWalkthrough : MonoBehaviour
 {
     public float sampleInterval = 0.1f;             // How many seconds have to pass until new sample is taken.
-    public string fileName;                         // Name of file the samples get written to.
-    public bool useCustomSubDirectory = false;
-    public string directory = "RawData/Default";
+    public string fileName = "virtual_walkthrough.csv"; // Name of file the samples get written to.
+    public string dataDirectory = DefaultPaths.RawDataPath;
     public float targetProximity = 1.0f;
     public Transform target;                        // The target to be found.
     public GameObject view;                         // The actual view.
@@ -40,15 +23,12 @@ public class CaptureWalkthrough : MonoBehaviour
     private List<float> xAngle;                     // Elevation.
     private List<float> time;                       // Time.
     private float lastSample;                       // The time the last sample was taken.  
-    private const char csvSep = ';';  
+    private const string csvSep = ";";
+    private string path;
 
     // Start is called before the first frame update
     void Start()
     {
-        if (!Directory.Exists(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
         // Checking that camera is present.
         bool hasCamera = false;
         for (int i = 0; i < gameObject.transform.childCount; i++)
@@ -61,7 +41,7 @@ public class CaptureWalkthrough : MonoBehaviour
         }
         if (!hasCamera)
         {
-            throw new System.Exception("The Player Object this component is attached to has no Camera object child. Please use a valid Player.");
+            Debug.LogError("The Player Object this component is attached to has no Camera object child. Please use a valid Player.");
         }
 
         // Initialize the containers of our data.
@@ -74,9 +54,12 @@ public class CaptureWalkthrough : MonoBehaviour
         xAngle = new List<float>();
         time = new List<float>();
 
-        fileName = MakeFileNameUnique(fileName);
+        Debug.Log($"fileName: {fileName}");
 
-        Debug.Log("Writing raw data to " + fileName);
+
+        path = IO.GenerateUniqueFilename(dataDirectory, fileName);
+
+        Debug.Log($"Writing raw data to: {path}");
 
         // Set the time of the last sample to the moment the game starts.
         lastSample = Time.realtimeSinceStartup;
@@ -102,70 +85,60 @@ public class CaptureWalkthrough : MonoBehaviour
             xAngle.Add(view.transform.rotation.eulerAngles.x);
             time.Add(currTime);
         }
+
         if (Vector3.Distance(gameObject.transform.position, target.transform.position) < targetProximity)
         {
-            WriteRawDataFile();
-#if UNITY_EDITOR
+            // Prepare data for CSV.
+            (List<string> columnNames, List<List<string>> data) = PrepareDataForCSV();
+
+            // Write data.
+            IO.WriteCSV(fileName, columnNames, data, csvSep);
             EditorApplication.ExitPlaymode();
-#endif
         }
     }
 
-    private string MakeFileNameUnique(string path)
+    private (List<string>, List<List<string>>) PrepareDataForCSV()
     {
-        // If the file does not exist yet, we can just return the input path.
-        if (!File.Exists(path))
+        // Generate column names.
+        List<string> columnNames = new() {
+            "Time",
+            "PositionX",
+            "PositionY",
+            "PositionZ",
+            "DirectionX",
+            "DirectionY",
+            "DirectionZ",
+            "UpX",
+            "UpY",
+            "UpZ",
+            "RightX",
+            "RightY",
+            "RightZ",
+        };
+
+        // Generate data matrix from the lists.
+        List<List<string>> data = new List<List<string>>();
+        for (int i = 0; i < positions.Count; i++)
         {
-            return path;
+            List<string> row = new List<string>() {
+                times[i].ToString("F3", CultureInfo.InvariantCulture),
+                positions[i].x.ToString("F3", CultureInfo.InvariantCulture),
+                positions[i].y.ToString("F3", CultureInfo.InvariantCulture),
+                positions[i].z.ToString("F3", CultureInfo.InvariantCulture),
+                directions[i].x.ToString("F3", CultureInfo.InvariantCulture),
+                directions[i].y.ToString("F3", CultureInfo.InvariantCulture),
+                directions[i].z.ToString("F3", CultureInfo.InvariantCulture),
+                ups[i].x.ToString("F3", CultureInfo.InvariantCulture),
+                ups[i].y.ToString("F3", CultureInfo.InvariantCulture),
+                ups[i].z.ToString("F3", CultureInfo.InvariantCulture),
+                rights[i].x.ToString("F3", CultureInfo.InvariantCulture),
+                rights[i].y.ToString("F3", CultureInfo.InvariantCulture),
+                rights[i].z.ToString("F3", CultureInfo.InvariantCulture),
+            };
+            data.Add(row);
         }
 
-        string pathWithoutFileName = Path.GetDirectoryName(path) + Path.DirectorySeparatorChar;
-        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(path);
-        string extension = Path.GetExtension(path);
-        int wildCard = 0;
-        while (File.Exists(pathWithoutFileName + fileNameWithoutExtension + "_" + wildCard.ToString() + extension))
-        {
-            wildCard++;
-        }
-        return pathWithoutFileName + fileNameWithoutExtension + "_" + wildCard.ToString() + extension;
-    }
-
-    public void WriteRawDataFile()
-    {
-        using (StreamWriter openFile = new StreamWriter(fileName)) 
-        {
-            for (int i = 0; i < positions.Count; i++) {
-
-                // Write out time.
-                string line = times[i].ToString("F3") + csvSep;
-
-                // Write out coordinates of position.
-                Vector3 currPos = positions[i];
-                line += currPos.x.ToString("F3") + csvSep;
-                line += currPos.y.ToString("F3") + csvSep;
-                line += currPos.z.ToString("F3") + csvSep;
-
-                // Write out coordinates of forward direction.
-                Vector3 currDir = directions[i];
-                line += currDir.x.ToString("F3") + csvSep;
-                line += currDir.y.ToString("F3") + csvSep;
-                line += currDir.z.ToString("F3") + csvSep;
-
-                // Write out coordinates of up direction.
-                Vector3 currUp = ups[i];
-                line += currUp.x.ToString("F3") + csvSep;
-                line += currUp.y.ToString("F3") + csvSep;
-                line += currUp.z.ToString("F3") + csvSep;
-
-                // Write out coordinates of right direction.
-                Vector3 currRight = rights[i];
-                line += currRight.x.ToString("F3") + csvSep;
-                line += currRight.y.ToString("F3") + csvSep;
-                line += currRight.z.ToString("F3");
-
-                openFile.WriteLine(line);
-            }
-        }
+        return (columnNames, data);
     }
 
     // Need to define this as well in case the trial is ended before the player can reach the end.
@@ -173,8 +146,11 @@ public class CaptureWalkthrough : MonoBehaviour
     {
         if (this.enabled)
         {
-            WriteRawDataFile();
+            // Prepare data for CSV.
+            (List<string> columnNames, List<List<string>> data) = PrepareDataForCSV();
+
+            // Write data.
+            IO.WriteCSV(path, columnNames, data, csvSep);
         }
     }
 }
-#endif

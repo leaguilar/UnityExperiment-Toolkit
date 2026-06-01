@@ -24,7 +24,12 @@ public static class Database
 
     public static string SessionId { get; set; }
 
-    public static string DataCollectionServerURL { get; set; }
+    private static string _dataCollectionServerURL;
+    public static string DataCollectionServerURL 
+    { 
+        get => _dataCollectionServerURL ?? "http://localhost:8080"; 
+        set => _dataCollectionServerURL = value; 
+    }
 
     public static int ParticipantAge { get; set; }
 

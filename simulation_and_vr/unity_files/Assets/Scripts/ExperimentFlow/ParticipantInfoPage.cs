@@ -20,7 +20,7 @@ namespace Assets.Scripts
 
         public Image AgeImage;
 
-        public Dropdown GenderDropdown;
+        public TMP_Dropdown GenderDropdown;
 
         [Header("Valid input colors")]
         [Space]
@@ -195,6 +195,12 @@ namespace Assets.Scripts
 
         private bool ValidateDataAssembly()
         {
+            if (WebGLTools.myconfig == null)
+            {
+                Debug.LogWarning("配置文件 (myconfig) 为空，已自动跳过服务器地址验证，仅用于本地 UI 测试！");
+                Database.DataCollectionServerURL = "http://localhost:8000";
+                return true;
+            }
             var isValid = !string.IsNullOrWhiteSpace(WebGLTools.myconfig.dataAssemblyUrl);
             if (isValid)
             {

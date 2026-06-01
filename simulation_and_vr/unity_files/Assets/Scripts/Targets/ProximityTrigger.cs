@@ -1,40 +1,40 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using UnityEngine;
+﻿using UnityEngine;
+using UnityEngine.Events;
 
-namespace Assets.Scripts
+public class ProximityTrigger : MonoBehaviour
 {
-    public class ProximityTrigger : MonoBehaviour
+    [Header("Detection Settings")]
+    public GameObject TargetObject; // Drag your FPSController here
+    public bool triggered = false;  // FindGoalTest reads this
+
+    [Header("Events (Optional)")]
+    public UnityEvent TriggerEnter;
+    public UnityEvent TriggerExit;
+
+    private void OnTriggerEnter(Collider other)
     {
-        public event Action TriggerEnter;
-
-        public event Action TriggerExit;
-
-        public GameObject TargetObject;
-
-        public bool triggered;
-
-        private void OnTriggerEnter(Collider other)
+        // Check if the thing entering is the Player (by reference, tag, or name)
+        if (other.gameObject == TargetObject || 
+            other.CompareTag("Player") || 
+            other.name.Contains("FPS") || 
+            other.name.Contains("Character"))
         {
-            triggered = true;
-
-            if (other.gameObject == TargetObject)
-            {
-                TriggerEnter?.Invoke();
-            }
-        }
-
-        private void OnTriggerExit(Collider other)
-        {
-            triggered = false;
-
-            if (other.gameObject == TargetObject)
-            {
-                TriggerExit?.Invoke();
-            }
+            triggered = true; // Set to TRUE so the task finishes
+            TriggerEnter?.Invoke();
+            Debug.Log("Player reached the goal!");
         }
     }
-}
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (other.gameObject == TargetObject || 
+            other.CompareTag("Player") || 
+            other.name.Contains("FPS") || 
+            other.name.Contains("Character"))
+        {
+            triggered = false;
+            TriggerExit?.Invoke();
+            Debug.Log("Player left the goal area.");
+        }
+    }
+} 

@@ -123,22 +123,36 @@ namespace Assets.Scripts
  
         public static IEnumerator FetchConfigJsonData()
         {
-            using (UnityWebRequest webRequest = UnityWebRequest.Get(configJsonUrl))
+            string url = configJsonUrl;
+
+            // 核心修复：如果在编辑器运行，强制指向本地 StreamingAssets 文件夹
+            if (Application.isEditor && url.StartsWith("/"))
             {
+                url = "file://" + System.IO.Path.Combine(Application.streamingAssetsPath, url.TrimStart('/')).Replace("\\", "/");
+            }
+
+            using (UnityWebRequest webRequest = UnityWebRequest.Get(url))
+            {
+                Debug.Log($"[WebGLTools] 正在从以下路径读取配置: {url}");
                 // Request and wait for the desired page.
                 yield return webRequest.SendWebRequest();
     
                 if (webRequest.isNetworkError)
                 {
-                    Debug.LogError($"Failed to fetch config data due to network fault.\nError: {webRequest.error}");
+                    Debug.LogError($"Failed to fetch config data due to network fault.\nURL: {url}\nError: {webRequest.error}");
                 }
                 else if (webRequest.isHttpError)
                 {
-                    Debug.LogError($"Failed to fetch config data, response code {webRequest.responseCode}.\nResponse:\n{webRequest.downloadHandler.text}");
+                    Debug.LogError($"Failed to fetch config data, response code {webRequest.responseCode}.\nURL: {url}\nResponse:\n{webRequest.downloadHandler.text}");
                 }
                 else
                 {
                     myconfig = JsonUtility.FromJson<ConfigData>(webRequest.downloadHandler.text);
+                    // 自动同步服务器地址到数据库
+                    if (myconfig != null && !string.IsNullOrEmpty(myconfig.dataAssemblyUrl))
+                    {
+                        Database.DataCollectionServerURL = myconfig.dataAssemblyUrl;
+                    }
                 }
             }
         }

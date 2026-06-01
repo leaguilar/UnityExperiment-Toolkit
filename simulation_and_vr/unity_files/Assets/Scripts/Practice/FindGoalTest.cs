@@ -1,47 +1,45 @@
-﻿using System.Collections;
+﻿using Assets.Scripts;
+using System.Collections;
 using System.Collections.Generic;
-using Assets.Scripts;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 public class FindGoalTest : ControlTest
 {
-    public ProximityTrigger Trigger;
+    [Header("Goal Setup")]
+    public ProximityTrigger Trigger; // The trigger on the sphere
+    public GameObject Hint;          // The sphere itself
+    public Transform Spawnpoint;     // Where the sphere should appear
 
-    public GameObject Hint;
-
-    public string nextSceneName;
-
-    public GameObject Spawnpoint;
-
-    protected override void OnTestFinished()
+    protected override void OnEnable()
     {
-        base.OnTestFinished();
-
-        if (!string.IsNullOrWhiteSpace(nextSceneName))
+        // 1. Reset trigger state to prevent "instant completion"
+        if (Trigger != null)
         {
-            SceneManager.LoadScene(nextSceneName, LoadSceneMode.Single);
+            Trigger.triggered = false;
         }
 
-        Database.SendMetaData("Practice", $"Finished practice for {this.Hint.name}.");
+        // 2. Call base to show the UI text
+        base.OnEnable();
+
+        // 3. Move the sphere to the spawn point
+        if (Hint != null && Spawnpoint != null)
+        {
+            Hint.SetActive(false); // Briefly disable to reset physics
+            Hint.transform.position = Spawnpoint.position;
+            Hint.transform.rotation = Spawnpoint.rotation;
+            Hint.SetActive(true);
+        }
     }
 
     protected override bool TestRequirements()
     {
-        return Trigger.triggered;
+        if (Trigger == null) return false;
+        return Trigger.triggered; // Task finishes when this becomes true
     }
 
-    protected override void OnEnable()
+    protected override void OnTestFinished()
     {
-        base.OnEnable();
-
-        Trigger.TargetObject.PlaceObject(Spawnpoint.transform.position, Spawnpoint.transform.rotation);
-
-        Hint.SetActive(true);
-    }
-
-    private void OnDisable()
-    {
-        Hint.SetActive(false);
+        if (Hint != null) Hint.SetActive(false);
+        Debug.Log("Goal found successfully!");
     }
 }

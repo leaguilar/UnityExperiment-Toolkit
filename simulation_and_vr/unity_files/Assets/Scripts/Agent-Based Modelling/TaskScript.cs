@@ -1,6 +1,6 @@
 ﻿/*
-DesignMind2: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
-Copyright (C) 2023-2026  michal Gath-Morad, Christoph Hölscher, Raphaël Baur, Leonel Aguilar
+DesignMind: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
+Copyright (C) 2023  michal Gath-Morad, Christoph Hölscher, Raphaël Baur
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

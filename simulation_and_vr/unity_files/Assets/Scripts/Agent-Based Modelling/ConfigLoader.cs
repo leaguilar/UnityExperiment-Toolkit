@@ -90,10 +90,28 @@ public void LoadSceneIfNotLoaded(string sceneToLoad)
 #if UNITY_EDITOR
             if (!Application.isPlaying)
             {
+                // In edit mode, EditorSceneManager.OpenScene requires the full asset path
+                string scenePath = sceneToLoad;
+                
+                // If it's just a name, try to find its path in the project
+                if (!sceneToLoad.StartsWith("Assets/") && !sceneToLoad.EndsWith(".unity"))
+                {
+                    string[] guids = UnityEditor.AssetDatabase.FindAssets("t:Scene " + sceneToLoad);
+                    if (guids.Length > 0)
+                    {
+                        scenePath = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]);
+                    }
+                    else
+                    {
+                        Debug.LogError($"[ConfigLoader] Could not find scene file for '{sceneToLoad}' in the project.");
+                        return;
+                    }
+                }
+
                 // Load the scene additively in edit mode
-                var loadedScene = EditorSceneManager.OpenScene(sceneToLoad, OpenSceneMode.Additive);
+                var loadedScene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
                 EditorSceneManager.SetActiveScene(loadedScene);
-                Debug.Log("Scene loaded and set as active in Edit Mode: " + sceneToLoad);
+                Debug.Log("Scene loaded and set as active in Edit Mode: " + scenePath);
             }
             else
 #endif

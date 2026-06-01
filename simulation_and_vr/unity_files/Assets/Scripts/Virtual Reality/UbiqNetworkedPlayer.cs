@@ -129,7 +129,7 @@ public class UbiqNetworkedPlayer :
         context.Send(JsonUtility.ToJson(state));
     }
 
-    protected override void ProcessMessage(ReferenceCountedSceneGraphMessage message)
+    public override void ProcessMessage(ReferenceCountedSceneGraphMessage message)
     {
         if (isLocalPlayer) return;  // Should not receive our own messages.
 

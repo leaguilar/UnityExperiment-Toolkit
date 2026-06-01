@@ -6,6 +6,18 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scenes/Zhuo/SetupZhuo.unity
+    guid: b4bdab7b73626e44aadc278264f564f8
+  - enabled: 1
+    path: Assets/Scenes/Zhuo/PracticeZhuo.unity
+    guid: 78d1637eba36bf546a3e60f70371717a
+  - enabled: 1
+    path: Assets/Scenes/Zhuo/LobbyZhuo.unity
+    guid: 4770b4021dab59a4c926d393c7f62378
+  - enabled: 1
+    path: Assets/Scenes/Zhuo/ExperimentalZhuo.unity
+    guid: 4700d850bae783a448d6039cd62fb44e
+  - enabled: 1
     path: Assets/Scenes/Setup.unity
     guid: f032e04edd1f1f54588d86063cd656b6
   - enabled: 1
@@ -26,4 +38,10 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/End.unity
     guid: 06055ed248edf43618de69c4a5de7112
+  - enabled: 1
+    path: Assets/Scenes/Zhuo/EndZhuo.unity
+    guid: 7f0baa33c3a2d30418068236089b94aa
+  - enabled: 1
+    path: Assets/Scenes/Zhuo/ed_baseline.unity
+    guid: e4d0fde43d7346847a75faf281981b5b
   m_configObjects: {}

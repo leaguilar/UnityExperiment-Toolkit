@@ -18,30 +18,15 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
+using System.Linq;
 
 #if UBIQ_PRESENT
 using Ubiq.Messaging;
-using Ubiq.Peers;
+using Ubiq.Rooms; // [FIX 1]: Updated from Ubiq.Peers to Ubiq.Rooms
 #endif
 
 /// <summary>
 /// Manages the lobby scene that gates entry into the collaborative VR experiment.
-///
-/// On startup it:
-///   1. Fetches the experiment config JSON (URL set in the Inspector).
-///   2. Writes ExperimentId and DataCollectionServerURL into Database.
-///   3. Waits until the Ubiq peer count reaches config.requiredParticipants.
-///   4. The first client to see the threshold broadcasts a "countdown_start" signal.
-///   5. All clients (including the sender) run a countdown and then load
-///      config.nextSceneName simultaneously.
-///
-/// For single-participant experiments set requiredParticipants = 1 in the config;
-/// the lobby transitions immediately without waiting for remote peers.
-///
-/// Scene setup:
-///   - Add a Ubiq NetworkScene to the lobby scene.
-///   - Attach this component to a persistent GameObject.
-///   - Wire StatusText and set ConfigUrl in the Inspector.
 /// </summary>
 public class LobbyManager :
 #if UBIQ_PRESENT
@@ -57,6 +42,12 @@ public class LobbyManager :
     [Tooltip("TMP_Text element used to display lobby status to the participant.")]
     public TMP_Text StatusText;
 
+    [Tooltip("TMP_Text element used to display the big countdown numbers.")]
+    public TMP_Text CountdownText;
+
+    public string nextSceneName = "LoadTrial";
+    public GameObject interactionDot;
+
     // -----------------------------------------------------------------
     // Internal state
     // -----------------------------------------------------------------
@@ -65,6 +56,7 @@ public class LobbyManager :
 
 #if UBIQ_PRESENT
     private NetworkScene networkScene;
+    private RoomClient roomClient; // [FIX 2]: Added RoomClient for new Ubiq API
 #endif
 
     private bool countdownStarted;
@@ -81,6 +73,11 @@ public class LobbyManager :
 
     private IEnumerator Start()
     {
+        // 自动补救：如果引用丢失，尝试通过名字寻找
+        if (StatusText == null) StatusText = GameObject.Find("StatusText")?.GetComponent<TMP_Text>();
+        if (CountdownText == null) CountdownText = GameObject.Find("CountdownDisplay")?.GetComponent<TMP_Text>();
+
+        if (interactionDot != null) interactionDot.SetActive(true);
         SetStatus("Loading experiment configuration\u2026");
 
         yield return FetchConfig();
@@ -101,19 +98,19 @@ public class LobbyManager :
 
 #if UBIQ_PRESENT
         networkScene = NetworkScene.Find(this);
+        roomClient = RoomClient.Find(this); // Find the new RoomClient
 
-        if (networkScene == null)
+        if (networkScene == null || roomClient == null)
         {
-            Debug.LogWarning("LobbyManager: No Ubiq NetworkScene found in scene. " +
+            Debug.LogWarning("LobbyManager: No Ubiq NetworkScene or RoomClient found in scene. " +
                              "Treating as single-participant session.");
             StartCountdown();
             yield break;
         }
 
-        // Subscribe to peer changes and do an immediate check in case the
-        // required number of peers is already connected.
-        networkScene.OnPeerAdded   += OnPeerCountChanged;
-        networkScene.OnPeerRemoved += OnPeerCountChanged;
+        // Subscribe to peer changes using RoomClient instead of NetworkScene
+        roomClient.OnPeerAdded.AddListener(OnPeerCountChanged);
+        roomClient.OnPeerRemoved.AddListener(OnPeerCountChanged);
         CheckPeerCount();
 #else
         // Ubiq not available: treat as single-participant, skip straight to countdown.
@@ -132,10 +129,11 @@ public class LobbyManager :
     {
         if (countdownStarted) return;
 
-        var connected = networkScene.Peers.Count;
+        var connected = roomClient.Peers.Count() + 1; 
         var required  = config?.requiredParticipants ?? 1;
 
-        SetStatus($"Waiting for participants\u2026\n{connected} / {required} connected");
+        // 更新状态：加入成功 + 动态人数
+        SetStatus($"Joined Room Successed!\nWaiting for participants... {connected} / {required} connected");
 
         if (connected >= required)
         {
@@ -150,7 +148,7 @@ public class LobbyManager :
     // Ubiq message handling
     // -----------------------------------------------------------------
 
-    protected override void ProcessMessage(ReferenceCountedSceneGraphMessage message)
+    public override void ProcessMessage(ReferenceCountedSceneGraphMessage message)
     {
         var msg = JsonUtility.FromJson<LobbyMessage>(message.ToString());
         if (msg.type == "countdown_start")
@@ -175,10 +173,24 @@ public class LobbyManager :
     {
         var seconds = Mathf.Max(1, Mathf.RoundToInt(config?.countdownSeconds ?? 3f));
 
+        if (CountdownText != null)
+        {
+            CountdownText.gameObject.SetActive(true);
+        }
+
         for (var i = seconds; i > 0; i--)
         {
-            SetStatus($"All participants connected!\nStarting in {i}\u2026");
+            SetStatus($"Joined Room Successed!\nStarting in {i}\u2026");
+            if (CountdownText != null)
+            {
+                CountdownText.text = i.ToString();
+            }
             yield return new WaitForSeconds(1f);
+        }
+
+        if (CountdownText != null)
+        {
+            CountdownText.text = "GO!";
         }
 
         var scene = config?.nextSceneName;

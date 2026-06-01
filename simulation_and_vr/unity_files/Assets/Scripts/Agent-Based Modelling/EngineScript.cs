@@ -1,6 +1,6 @@
 /*
-DesignMind2: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
-Copyright (C) 2023-2026  michal Gath-Morad, Christoph Hölscher, Raphaël Baur, Leonel Aguilar
+DesignMind: A Toolkit for Evidence-Based, Cognitively- Informed and Human-Centered Architectural Design
+Copyright (C) 2023  michal Gath-Morad, Christoph Hölscher, Raphaël Baur
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,15 +20,10 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
-using UnityEngine.UI;
-using UnityEngine.EventSystems;
 using System.IO;
 using System;
 using System.Globalization;
-using System.Linq;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
+using EBD;
 
 public class EngineScript : MonoBehaviour
 {
@@ -38,7 +33,7 @@ public class EngineScript : MonoBehaviour
     private int activeTasks;                        // Number of active tasks.
     private bool allTasksCompleted;                 // Set if all tasks have been completed.
     private float startTime;                        // Time when simulation was started.
-
+    
     // These fields maintain the recorded quantitities of each agent. They are arrays (fixed-size) of lists
     // (variable-size). The array entries corresponds to lists of agent-related quantities for each task. This design
     // decision was made since at runtime, there are always a fixed number of tasks, but a variable number of active
@@ -69,89 +64,13 @@ public class EngineScript : MonoBehaviour
     public string fileName;                         // Name of the file where data gets written to.
     public float sampleInterval;                    // Interval which needs to pass until new data is sampled.
     private float lastSample;                       // Last time a sample was taken.
-    private StreamWriter file;                      // Stream that writes data to file.
     private string path;                            // Unique path where file gets saved to.
-    private string testPath;
-    private float latestTime;
-    private Text simIdText;
 
     // Start is called before the first frame update
     void Start()
     {
-        ShowSimInfo();
-        if (ConfigManager.Instance != null)
-        {
-            // Initialize Engine Parameters
-            Debug.Log("### Engine Script: Config file information found overwriting values");
-            sampleInterval=ConfigManager.Instance.Config.EngineScript_sampleInterval;
-            dataFolder=CreateDataPath("data_abm_batch",ConfigManager.Instance.Config.Purpose,ConfigManager.Instance.Config.Scene, ConfigManager.Instance.Config.Scenario);
-            fileName=SanitizeName(ConfigManager.Instance.Config.Purpose+"_batch_simId_"+ConfigManager.Instance.Config.simId+"_sampleNum_"+ConfigManager.Instance.Config.sampleNum);
-
-            Time.timeScale = 1.0f;
-            QualitySettings.vSyncCount = 0;
-            Application.targetFrameRate = -1; // Unlimited frame rate
-            // foreach (Camera cam in Camera.allCameras)
-            //     cam.enabled = false;
-
-            // Load external configuration if it exists
-            TaskScript[] c_tasks = GetComponents<TaskScript>();
-
-            // Remove each component
-            foreach (TaskScript c_task in c_tasks)
-            {
-                DestroyImmediate(c_task);
-            }
-               
-            foreach (TaskData t_task in ConfigManager.Instance.Config.tasks)
-            {
-                TaskScript mytask = gameObject.AddComponent<TaskScript>();
-                Debug.Log("Task Name: " + t_task.taskName); 
-                mytask.numberOfAgents=t_task.numberOfAgents;
-                mytask.spawnInterval=t_task.spawnInterval;
-                mytask.taskName=t_task.taskName;
-                mytask.agentType=t_task.agentType;
-                mytask.numberOfNeeds=t_task.numberOfNeeds;
-                mytask.agentSpeed=t_task.agentSpeed;
-                mytask.agentSize=t_task.agentSize;
-                mytask.agentRadius=t_task.agentRadius;
-                mytask.privacyRadius=t_task.privacyRadius;
-                mytask.poiTime=t_task.poiTime;
-                mytask.revisit=t_task.revisit;
-                mytask.chooseNonDeterministically=t_task.chooseNonDeterministically;
-                PopulateObjectArray(t_task.start,out mytask.start);
-                PopulateObjectArray(t_task.end,out mytask.end);
-                PopulateObjectArray(t_task.pointsOfInterest,out mytask.pointsOfInterest);
-                mytask.taskColor = ParseColor(t_task.taskColor);
-            }
-        }
-
         // Get all tasks on this object.
         tasks = GetComponents<TaskScript>();
-        tasks = tasks.Where(task => task != null && task.gameObject != null).ToArray();
-
-        foreach (TaskScript task in tasks)
-        {
-            if (task == null)
-            {
-                Debug.LogError("Error: Found a null TaskScript reference.");
-                continue;
-            }
-
-            // Check if task properties are valid
-            if (string.IsNullOrEmpty(task.taskName))
-            {
-                Debug.LogWarning($"Warning: Task {task} has no name assigned.");
-                continue;
-            }
-
-            if (task.numberOfAgents <= 0)
-            {
-                Debug.LogWarning($"Warning: Task {task.taskName} has zero agents assigned.");
-                continue;
-            }
-        }
-
-        //
 
         // Collect all POIs.
         POIs = new List<GameObject>();
@@ -177,11 +96,13 @@ public class EngineScript : MonoBehaviour
         }
 
         startTime = Time.realtimeSinceStartup;
+        Debug.Log($"[ABM Engine] Simulation Started. Task Count: {tasks.Length}, Random Seed: {ConfigManager.Instance?.Config?.simId}");
+        
         agents = new List<GameObject>[tasks.Length];
         for (int i = 0; i < agents.Length; i++) {
             agents[i] = new List<GameObject>();
         }
-        path = makeFileNameUnique(dataFolder, fileName, "csv");
+        path = IO.GenerateUniqueFilename(dataFolder, fileName + ".csv");
 
         agentToPos = new List<List<Vector3>>[tasks.Length];
         agentToColl = new List<int>[tasks.Length];
@@ -197,164 +118,12 @@ public class EngineScript : MonoBehaviour
         }
     }
 
-    Color ParseColor(string colorString)
-    {
-        if (string.IsNullOrEmpty(colorString))
-        {
-            Debug.LogWarning("Color string is empty, defaulting to black.");
-            return Color.black; // Default color if empty
-        }
-
-        // HEX format (e.g., "#FF5733")
-        if (colorString.StartsWith("#"))
-        {
-            if (ColorUtility.TryParseHtmlString(colorString, out Color hexColor))
-            {
-                return hexColor;
-            }
-        }
-
-        // RGB format (e.g., "255,128,0")
-        else if (colorString.Contains(","))
-        {
-            string[] rgb = colorString.Split(',');
-            if (rgb.Length == 3 && 
-                int.TryParse(rgb[0], out int r) &&
-                int.TryParse(rgb[1], out int g) &&
-                int.TryParse(rgb[2], out int b))
-            {
-                return new Color(r / 255f, g / 255f, b / 255f);
-            }
-        }
-
-        // Named color format (e.g., "red", "blue", "yellow")
-        else
-        {
-            Dictionary<string, Color> namedColors = new Dictionary<string, Color>(StringComparer.OrdinalIgnoreCase)
-            {
-                { "red", Color.red },
-                { "green", Color.green },
-                { "blue", Color.blue },
-                { "yellow", Color.yellow },
-                { "cyan", Color.cyan },
-                { "magenta", Color.magenta },
-                { "black", Color.black },
-                { "white", Color.white },
-                { "gray", Color.gray },
-                { "grey", Color.grey },
-                { "orange", new Color(1f, 0.5f, 0f) },
-                { "purple", new Color(0.5f, 0f, 0.5f) },
-                { "pink", new Color(1f, 0.4f, 0.7f) },
-                { "brown", new Color(0.6f, 0.3f, 0.1f) }
-            };
-
-            if (namedColors.TryGetValue(colorString.Trim(), out Color namedColor))
-            {
-                return namedColor;
-            }
-        }
-
-        Debug.LogWarning($"Invalid color format: {colorString}, defaulting to white.");
-        return Color.black; // Fallback color
-    }
-
-public void ShowSimInfo()
-    {
-        // Create a new Canvas GameObject.
-        GameObject canvasObj = new GameObject("HUDCanvas");
-        Canvas canvas = canvasObj.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceCamera;
-        
-        // Add a CanvasScaler for responsive UI scaling.
-        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(800, 600);
-        
-        // Ensure the Canvas fills the entire screen.
-        RectTransform canvasRect = canvasObj.GetComponent<RectTransform>();
-        canvasRect.anchorMin = Vector2.zero;
-        canvasRect.anchorMax = Vector2.one;
-        canvasRect.offsetMin = Vector2.zero;
-        canvasRect.offsetMax = Vector2.zero;
-
-        // Create a new GameObject for the Text element.
-        GameObject textObj = new GameObject("SimIdText");
-        textObj.transform.SetParent(canvasObj.transform);
-
-        // Add the Text component and set its properties.
-        Text simIdText = textObj.AddComponent<Text>();
-        simIdText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        simIdText.fontSize = 24;
-        simIdText.alignment = TextAnchor.UpperLeft;
-        simIdText.color = Color.white;
-        
-        // Configure the RectTransform for proper positioning.
-        RectTransform textRect = simIdText.GetComponent<RectTransform>();
-        textRect.anchorMin = new Vector2(0, 1);  // Top-left corner
-        textRect.anchorMax = new Vector2(0, 1);
-        textRect.pivot = new Vector2(0, 1);
-        textRect.anchoredPosition = new Vector2(10, -10); // 10 pixels offset from top-left
-        textRect.sizeDelta = new Vector2(400, 100);
-
-        // Display the simId value.
-        simIdText.text = "simId: " + ConfigManager.Instance.Config.simId;
-    }
-
-
-
-    public void PopulateObjectArray(string allObjectNames, out GameObject[] objArray)
-    {
-        List<GameObject> tempList = new List<GameObject>();
-
-        string[] names = allObjectNames.Split(','); // Split string by comma
-
-        foreach (string objectName in names) // loop over names
-        {
-            string trimmedName = objectName.Trim(); // Remove extra spaces
-            GameObject targetObject = GameObject.Find(trimmedName);
-
-            if (targetObject == null)
-            {
-                Debug.LogWarning("Object not found: " + trimmedName);
-                continue; // Skip to the next name instead of returning immediately
-            }
-
-            if (targetObject.transform.childCount > 0)
-            {
-                foreach (Transform child in targetObject.transform)
-                {
-                    tempList.Add(child.gameObject);
-                }
-            }
-            else
-            {
-                tempList.Add(targetObject); // No children, add only the object itself
-            }
-        }
-
-        objArray = tempList.ToArray(); 
-
-        Debug.Log("Populated array with " + objArray.Length + " elements.");
-    }
-    
-    string CreateDataPath(params string[] pathSegments)
-    {
-        return Path.Combine(pathSegments.Select(SanitizeName).ToArray());
-    }
-
-    string SanitizeName(string input)
-    {
-        return input.ToLower().Replace(" ", "_");
-    }
-
     // Update is called once per frame
     void Update()
     {
         /* Go through all agents per task and check,
          * if the agents want to be destroyed. In that case, save their data and destroy them.
          */
-        bool anyAgentsLeft = false; 
-         
         Boolean record = lastSample + sampleInterval < Time.realtimeSinceStartup;
         if (record) {
             lastSample = Time.realtimeSinceStartup;
@@ -364,7 +133,6 @@ public void ShowSimInfo()
                 AgentScript currAgent = agents[i][j].GetComponent<AgentScript>();
                 GameObject currAgentHolder = agents[i][j];
                 int containerIdx = currAgent.startIndex;
-                //Debug.Log("# i: "+i+" j:"+j+" - "+currAgentHolder.transform.position);
                 if (record) {
                     agentToPos[i][containerIdx].Add(currAgentHolder.transform.position);
                     agentToColl[i][containerIdx] += collisions(currAgentHolder, i, j);
@@ -378,8 +146,6 @@ public void ShowSimInfo()
                     Destroy(agents[i][j]);
                     agents[i].RemoveAt(j);
                     j--;
-                } else {
-                    anyAgentsLeft = true; // At least one agent is still active
                 }
             }
         }
@@ -399,28 +165,21 @@ public void ShowSimInfo()
                     agentToTime[i].Add(Time.realtimeSinceStartup);
                     agentToAllColl[i].Add(new int[tasks.Length]);
                     tasks[i].agentsSpawned++;
-                    anyAgentsLeft = true; // A new agent has been added
-
                 }
-            }else {
-                //TODO
-                allTasksCompleted = true;
             }
         }
 
-
         // If there are no more active tasks, we can stop the simulation.
-        //if (activeTasks == 0 && !allTasksCompleted) {
-        //    allTasksCompleted = true;
-        //}
-        
-        if(!anyAgentsLeft && allTasksCompleted){
-        Debug.Log("# No Agents Left!");
-        #if UNITY_EDITOR
-        EditorApplication.ExitPlaymode();  // Exit Play mode in Unity Editor
-        #else
-        Application.Quit();  // Quit application in standalone build
-        #endif
+        if (activeTasks == 0 && !allTasksCompleted) {
+            allTasksCompleted = true;
+            Debug.Log("[ABM Engine] All agents have completed their tasks. Simulation finished.");
+            
+            // In batch mode, Application.Quit is usually called elsewhere, but let's log the completion.
+            #if UNITY_EDITOR
+                UnityEditor.EditorApplication.isPlaying = false;
+            #else
+                Application.Quit();
+            #endif
         }
     }
 
@@ -431,21 +190,11 @@ public void ShowSimInfo()
     // Spawns an agent from a task.
     private GameObject SpawnAgent(TaskScript task, int startIdx) {
 
-        if (task == null)
-        {
-            Debug.LogError("Error: Trying to spawn an agent without a task assigned.");
-            return null;
-        }
-
         // Create the GameObject that will be the agent.
         GameObject agent = GameObject.CreatePrimitive(PrimitiveType.Capsule);
 
         // Apply a material in the with the color of the specific task.
-        //Shader shader = Shader.Find("Standard");
-        Shader shader = Shader.Find("Diffuse");
-        //Debug.Log(shader != null ? "Shader found!" : "Shader is null!");
-        //Material material = new Material(Shader.Find("Diffuse"));
-        Material material = new Material(shader);
+        Material material = new Material(Shader.Find("Diffuse"));
         material.color = task.taskColor;
         agent.GetComponent<MeshRenderer>().material = material;
 
@@ -465,6 +214,9 @@ public void ShowSimInfo()
         agent.GetComponent<AgentScript>().visualizePaths = visualizePaths;
         agent.GetComponent<AgentScript>().visualizeTrajectories = visualizeTrajectories;
         agent.GetComponent<AgentScript>().startIndex = startIdx;
+        
+        Debug.Log($"[ABM Engine] Spawned agent '{task.agentType}' for task '{task.taskName}' at {hit.position}");
+        
         return agent;
     }
 
@@ -489,41 +241,10 @@ public void ShowSimInfo()
         }
     }
 
-    string makeFileNameUnique(string dirName, string fileName, string format)
-    {
-        // Create directory if does not exist.
-        Directory.CreateDirectory(dirName);
-
-        // This is the path the file will be written to.
-        string path = dirName + Path.DirectorySeparatorChar + fileName + "." + format;
-        
-        // Check if specified file exists yet and if user wants to overwrite.
-        if (File.Exists(path))
-        {
-            /* In this case we need to make the filename unique.
-             * We will achiece that by:
-             * foldername + sep + filename + . + format -> foldername + sep + filename + _x + . format
-             * x will be increased in case of multiple overwrites.
-             */
-            
-            // Check if there was a previous overwrite and get highest identifier.
-            int id = 0;
-            while (File.Exists(dirName + Path.DirectorySeparatorChar + fileName + "_" + id.ToString() + "." + format))
-            {
-                id++;
-            }
-
-            // Now we have found a unique identifier and create the new name.
-            path = dirName + Path.DirectorySeparatorChar + fileName + "_" + id.ToString() + "." + format;
-        }
-        return path;
-    }
-
     void OnDestroy() {
 
         // Find longest trajectory.
         int maxLen = 0;
-        
         for (int i = 0; i < agentToPos.Length; i++) {
             for (int j = 0; j < agentToPos[i].Count; j++) {
                 maxLen = agentToPos[i][j].Count > maxLen ? agentToPos[i][j].Count : maxLen;
@@ -575,7 +296,7 @@ public void ShowSimInfo()
                             agentToPos[i][j][k].z.ToString(CultureInfo.InvariantCulture) + ";";
                 }
                 for (; k < maxLen; k++) {
-                    line += ";;;";
+                    line += "NaN;NaN;NaN;";
                 }
                 if (line.EndsWith(";")) {
                     line = line.Remove(line.Length-1);
@@ -585,7 +306,6 @@ public void ShowSimInfo()
         }
 
         File.WriteAllLines(path, lines);
-        Debug.Log("# DONE!");
     }
 
     private int collisions(GameObject refAgent, int I, int J) {
