@@ -439,9 +439,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Trials:
-  - Zollverein_Base
-  - Zollverein_Atrium
-  - Zollverein_Glass
+  - ExperimentalZhuo
   Progress: 0
   Text: {fileID: 0}
 --- !u!4 &1486776388

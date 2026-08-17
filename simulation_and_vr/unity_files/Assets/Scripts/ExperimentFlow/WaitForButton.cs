@@ -51,9 +51,9 @@ namespace Assets.Scripts
             if (mouseTracker != null) mouseTracker.enabled = active;
             if (interactionDot != null) interactionDot.SetActive(active);
 
-            // 处理光标
-            Cursor.lockState = active ? CursorLockMode.Locked : CursorLockMode.None;
-            Cursor.visible = !active;
+            bool shouldLock = active && (FPSController != null || mouseTracker != null);
+            Cursor.lockState = shouldLock ? CursorLockMode.Locked : CursorLockMode.None;
+            Cursor.visible = !shouldLock;
         }
 
         protected override bool CanApplyPage() => Time.time > startTime + minWaitTime;

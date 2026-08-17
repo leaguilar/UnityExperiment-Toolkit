@@ -412,7 +412,7 @@ MonoBehaviour:
   controller: {fileID: 2112355582}
   movementSpeed: 2
   gravity: -9.81
-  groundCheck: {fileID: 1704949597}
+  groundCheck: {fileID: 796599087}
   checkRadius: 2
   layerMask:
     serializedVersion: 2
@@ -589,6 +589,23 @@ PrefabInstance:
       propertyPath: m_AnchoredPosition.y
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 1731467569171809127, guid: 46c1f5d5a11cf5042886aabd56e7b9d7,
+        type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1731467569171809127, guid: 46c1f5d5a11cf5042886aabd56e7b9d7,
+        type: 3}
+      propertyPath: avatarPrefab
+      value: 
+      objectReference: {fileID: 3172939939781028348, guid: 59bce046eba3bb14a80855d4c1810e99,
+        type: 3}
+    - target: {fileID: 1731467569171809127, guid: 46c1f5d5a11cf5042886aabd56e7b9d7,
+        type: 3}
+      propertyPath: avatarCatalogue
+      value: 
+      objectReference: {fileID: 11400000, guid: 154fbe2147d60d44384df3453ca8feba,
+        type: 2}
     - target: {fileID: 2111886246478503278, guid: 46c1f5d5a11cf5042886aabd56e7b9d7,
         type: 3}
       propertyPath: m_AnchorMax.y
@@ -734,6 +751,12 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 2642065778884258271, guid: 46c1f5d5a11cf5042886aabd56e7b9d7,
+        type: 3}
+      propertyPath: servers.Array.data[0]
+      value: 
+      objectReference: {fileID: 11400000, guid: 4cfe8feadc4730249b16fa7d4e607f1e,
+        type: 2}
     - target: {fileID: 3291355541082766094, guid: 46c1f5d5a11cf5042886aabd56e7b9d7,
         type: 3}
       propertyPath: m_AnchorMax.y
@@ -887,7 +910,11 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 2642065778884258265, guid: 46c1f5d5a11cf5042886aabd56e7b9d7,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 745382337}
   m_SourcePrefab: {fileID: 100100000, guid: 46c1f5d5a11cf5042886aabd56e7b9d7, type: 3}
 --- !u!114 &745382335 stripped
 MonoBehaviour:
@@ -899,6 +926,24 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 78043eb8bdd2f6b44a1cfd44c3b8fa5a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!1 &745382336 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2642065778884258265, guid: 46c1f5d5a11cf5042886aabd56e7b9d7,
+    type: 3}
+  m_PrefabInstance: {fileID: 745382334}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &745382337
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 745382336}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: be1189496e13a734cb76b4f6452d9217, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
 --- !u!1001 &796599084
@@ -1022,6 +1067,12 @@ MonoBehaviour:
   m_LightCookieSize: {x: 1, y: 1}
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 0
+--- !u!4 &796599087 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 7290265296473029501, guid: f2d44976f09b5df40b4d00077fec932a,
+    type: 3}
+  m_PrefabInstance: {fileID: 796599084}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &798133589
 GameObject:
   m_ObjectHideFlags: 0
@@ -1054,7 +1105,7 @@ MonoBehaviour:
   ConfigUrl: experiment_1_config.json
   StatusText: {fileID: 0}
   CountdownText: {fileID: 0}
-  nextSceneName: LoadTrial
+  nextSceneName: ExperimentalZhuo
   interactionDot: {fileID: 0}
 --- !u!4 &798133591
 Transform:
@@ -1121,6 +1172,7 @@ MonoBehaviour:
   playerBody: {fileID: 447978495}
   maxDorsal: 60
   maxVentral: 60
+  isLocalPlayer: 1
 --- !u!20 &1202669328
 Camera:
   m_ObjectHideFlags: 0

@@ -110,10 +110,18 @@ public class UbiqNetworkedPlayer :
     // Networking
     // -------------------------------------------------------------------------
 
+    private float lastSendTime;
+
 #if UBIQ_PRESENT
     private void Update()
     {
         if (!isLocalPlayer) return;
+
+        if (Time.time - lastSendTime > 2f)
+        {
+            Debug.Log($"[UbiqNetworkedPlayer] Sending position: {transform.position}, isLocalPlayer={isLocalPlayer}, isNetworkActive={isNetworkActive}");
+            lastSendTime = Time.time;
+        }
 
         var state = new PlayerState
         {
@@ -131,7 +139,9 @@ public class UbiqNetworkedPlayer :
 
     public override void ProcessMessage(ReferenceCountedSceneGraphMessage message)
     {
-        if (isLocalPlayer) return;  // Should not receive our own messages.
+        if (isLocalPlayer) return;
+
+        Debug.Log($"[UbiqNetworkedPlayer] Received message on {gameObject.name}, isNetworkActive={isNetworkActive}");
 
         var state = JsonUtility.FromJson<PlayerState>(message.ToString());
 

@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -11,6 +12,10 @@ namespace Assets.Scripts
     public class TrialOverview : SetupPage
     {
         public int Repetitions = 3;
+
+        [Header("Task Order")]
+        [Tooltip("When false, targets appear in Number order (1,2,3...). When true, shuffled.")]
+        public bool randomizeOrder = false;
         
         public TMP_Text HeaderText;
         public TMP_Text DescriptionText;
@@ -27,6 +32,10 @@ namespace Assets.Scripts
         public TrialSyncManager SyncManager;
 
         public string NextSceneName;
+
+        [Header("Auto-advance")]
+        [Tooltip("When false, the panel only shows for the first task. Subsequent tasks auto-start.")]
+        public bool showPanelBetweenTasks = false;
 
         private Vector3 manualStartPosition;
         private Quaternion manualStartRotation;
@@ -56,10 +65,13 @@ namespace Assets.Scripts
             Debug.Log($"[TrialOverview] 场景体检：共发现 {allTargets.Length} 个目标球。");
             foreach(var t in allTargets) Debug.Log($" - 发现目标 #{t.Number}: {t.Description}");
 
+            if (!randomizeOrder)
+                allTargets = allTargets.OrderBy(t => t.Number).ToArray();
+
             tasks = new List<Target>(allTargets.Length * Repetitions);
             for (var i = 0; i < Repetitions; i++)
             {
-                RandomizeOrder(allTargets);
+                if (randomizeOrder) RandomizeOrder(allTargets);
                 tasks.AddRange(allTargets);
             }
 
@@ -148,8 +160,8 @@ namespace Assets.Scripts
                 if (collider != null) collider.enabled = true;
             }
 
-            HeaderText.text = $"Task Goal #{Database.TrialResults.Count + 1} of {this.totalTasks}";
-            DescriptionText.text = $"Find the {currentTarget.Description}\nGo to the {currentMaterial.name.ToLower()} ball.";
+            HeaderText.text = $"Step {Database.TrialResults.Count + 1} of {this.totalTasks}";
+            DescriptionText.text = $"{currentTarget.Description}";
             
             if (DescriptionImage != null)
             {
@@ -188,7 +200,9 @@ namespace Assets.Scripts
             // 自动补救：如果开始后还没连上 HintText，尝试找一下
             if (HintText == null) HintText = GameObject.Find("HintText")?.GetComponent<TMP_Text>();
 
-            string hintMsg = $"Target: {currentTarget.Description}\nColor: {currentMaterial.name}";
+            string hintMsg = currentTarget.requireInteraction
+                ? $"Step {Database.TrialResults.Count + 1}/{totalTasks}\n{currentTarget.Description}\n[Press E to complete]"
+                : $"Step {Database.TrialResults.Count + 1}/{totalTasks}\n{currentTarget.Description}";
 
             if (HintText != null)
             {
@@ -259,6 +273,52 @@ namespace Assets.Scripts
                 items[i] = items[newIndex];
                 items[newIndex] = tmp;
             }
+        }
+
+        public void AutoStartNextTrial()
+        {
+            Debug.Log($"[TrialOverview] AutoStartNextTrial: tasks.Count={tasks.Count}");
+
+            if (tasks.Count == 0)
+            {
+                SceneManager.LoadScene(NextSceneName, LoadSceneMode.Single);
+                return;
+            }
+
+            currentTarget = tasks[0];
+            tasks.RemoveAt(0);
+
+            currentMaterial = materials[0];
+            materials.RemoveAt(0);
+
+            if (currentTarget != null)
+            {
+                var renderer = currentTarget.GetComponent<Renderer>();
+                if (renderer != null)
+                {
+                    renderer.sharedMaterial = currentMaterial;
+                    renderer.enabled = true;
+                }
+                currentTarget.gameObject.SetActive(true);
+                var collider = currentTarget.GetComponent<Collider>();
+                if (collider != null) collider.enabled = true;
+            }
+
+            if (HintText != null)
+            {
+                HintText.gameObject.SetActive(true);
+                HintText.text = $"Target: {currentTarget.Description}\nColor: {currentMaterial.name}";
+            }
+            if (HintImage != null)
+            {
+                HintImage.gameObject.SetActive(true);
+                HintImage.color = currentMaterial.color;
+            }
+
+            if (SyncManager != null)
+                SyncManager.BroadcastTrialStart(currentTarget.Number, currentMaterial.name);
+            else
+                OnNetworkTrialStart(currentTarget.Number, currentMaterial.name);
         }
     }
 }

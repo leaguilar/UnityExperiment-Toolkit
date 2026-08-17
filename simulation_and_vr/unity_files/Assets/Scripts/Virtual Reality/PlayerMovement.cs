@@ -32,12 +32,18 @@ public class PlayerMovement : MonoBehaviour
 
     void Awake()
     {
-        // 智能搜索：先找自己，再找父物体
         if (controller == null)
         {
             controller = GetComponent<CharacterController>();
             if (controller == null) controller = GetComponentInParent<CharacterController>();
             if (controller == null) controller = GetComponentInChildren<CharacterController>();
+        }
+
+        if (groundCheck == null)
+        {
+            var t = transform.Find("FirstPersonCharacter 1");
+            if (t != null) groundCheck = t.Find("groundCheck");
+            if (groundCheck == null && t != null) groundCheck = t;
         }
         
         if (controller == null)

@@ -11,6 +11,13 @@ unity_files/obj/
 unity_files/Logs/
 unity_files/UserSettings/
 
+# Build output and temp copies (large)
+unity_files/Unity_Build/
+simulation_and_vr_copy/
+**/__pycache__/
+*.fbxbak
+*.fbxbak.meta
+
 # Large asset folders (project-specific geometry/models, not needed for students)
 unity_files/Assets/Base model/
 unity_files/Assets/Geometry/

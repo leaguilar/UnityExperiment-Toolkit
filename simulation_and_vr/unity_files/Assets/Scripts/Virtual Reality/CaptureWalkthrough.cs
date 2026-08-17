@@ -93,7 +93,11 @@ public class CaptureWalkthrough : MonoBehaviour
 
             // Write data.
             IO.WriteCSV(fileName, columnNames, data, csvSep);
+#if UNITY_EDITOR
             EditorApplication.ExitPlaymode();
+#else
+            Application.Quit();
+#endif
         }
     }
 

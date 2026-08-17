@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "deepseek": {
+      "options": {
+        "apiKey": "sk-3ed4f49a39e848c5ab6b79ebc76d1661"
+      }
+    }
+  },
+  "model": "deepseek/deepseek-chat"
+}

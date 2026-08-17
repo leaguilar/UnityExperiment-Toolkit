@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -29,6 +29,7 @@ namespace Assets.Scripts
             normalColor = new Color(0f, 0.992f, 0.765f, 1f),
             highlightedColor = new Color(0f, 0.878f, 0.675f, 1f),
             pressedColor = new Color(0f, 0.698f, 0.537f, 1f),
+            selectedColor = new Color(0f, 0.992f, 0.765f, 1f),
             disabledColor = new Color(0.784f, 0.784f, 0.784f, 1f),
             colorMultiplier = 1f,
             fadeDuration = 0.1f
@@ -41,6 +42,7 @@ namespace Assets.Scripts
             normalColor = new Color(0.992f, 0.431f, 0f, 1f),
             highlightedColor =  new Color(0.878f, 0.384f, 0f, 1f),
             pressedColor = new Color(0.698f, 0.306f, 0f, 1f),
+            selectedColor = new Color(0.992f, 0.431f, 0f, 1f),
             disabledColor = new Color(0.784f, 0.784f, 0.784f, 1f),
             colorMultiplier = 1f,
             fadeDuration = 0.1f
@@ -188,7 +190,11 @@ namespace Assets.Scripts
         private bool ValidateGender()
         {
             var isValid = GenderDropdown.value != 0;
-            GenderDropdown.colors = isValid ? ValidColor : InvalidColor;
+            
+            ColorBlock cb = isValid ? ValidColor : InvalidColor;
+            cb.selectedColor = cb.normalColor;
+            cb.highlightedColor = cb.normalColor;
+            GenderDropdown.colors = cb;
 
             return isValid;
         }

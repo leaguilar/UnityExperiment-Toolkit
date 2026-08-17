@@ -111,6 +111,10 @@ public class LobbyManager :
         // Subscribe to peer changes using RoomClient instead of NetworkScene
         roomClient.OnPeerAdded.AddListener(OnPeerCountChanged);
         roomClient.OnPeerRemoved.AddListener(OnPeerCountChanged);
+
+        roomClient.Join(new Guid("4b5e1f8a-3c2d-4a9e-b1f6-7d8c0e3a9f2b"));
+        roomClient.timeoutBehaviour = RoomClient.TimeoutBehaviour.None;
+
         CheckPeerCount();
 #else
         // Ubiq not available: treat as single-participant, skip straight to countdown.
@@ -132,14 +136,16 @@ public class LobbyManager :
         var connected = roomClient.Peers.Count() + 1; 
         var required  = config?.requiredParticipants ?? 1;
 
-        // 更新状态：加入成功 + 动态人数
+        Debug.Log($"[Lobby] CheckPeerCount: connected={connected} required={required} countdownStarted={countdownStarted}");
+
         SetStatus($"Joined Room Successed!\nWaiting for participants... {connected} / {required} connected");
 
         if (connected >= required)
         {
-            // First peer to notice broadcasts so all clients get the same signal.
+            Debug.Log($"[Lobby] >>> Starting countdown! connected={connected} >= required={required}");
             var msg = new LobbyMessage { type = "countdown_start" };
-            context.Send(JsonUtility.ToJson(msg));
+            try { context.Send(JsonUtility.ToJson(msg)); }
+            catch (System.Exception e) { Debug.LogWarning($"[Lobby] context.Send failed: {e.Message}"); }
             StartCountdown();
         }
     }
@@ -165,6 +171,7 @@ public class LobbyManager :
     private void StartCountdown()
     {
         if (countdownStarted) return;
+        Debug.Log("[Lobby] StartCountdown() called, starting coroutine...");
         countdownStarted = true;
         StartCoroutine(CountdownCoroutine());
     }
@@ -172,6 +179,7 @@ public class LobbyManager :
     private IEnumerator CountdownCoroutine()
     {
         var seconds = Mathf.Max(1, Mathf.RoundToInt(config?.countdownSeconds ?? 3f));
+        Debug.Log($"[Lobby] CountdownCoroutine started: {seconds}s, scene='{config?.nextSceneName ?? "NULL"}'");
 
         if (CountdownText != null)
         {
@@ -194,6 +202,7 @@ public class LobbyManager :
         }
 
         var scene = config?.nextSceneName;
+        Debug.Log($"[Lobby] Loading scene: '{scene}'");
         if (string.IsNullOrWhiteSpace(scene))
         {
             Debug.LogError("LobbyManager: nextSceneName is not set in the experiment config.");
@@ -201,6 +210,7 @@ public class LobbyManager :
         }
 
         SceneManager.LoadScene(scene, LoadSceneMode.Single);
+        Debug.Log($"[Lobby] SceneManager.LoadScene('{scene}') called");
     }
 
     // -----------------------------------------------------------------

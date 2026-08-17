@@ -132,11 +132,13 @@ namespace Assets.Scripts
 
         private void ApplyTrialEnd()
         {
-            if (!isTrialActive) return;  // ignore duplicate end signals
+            if (!isTrialActive) return;
             isTrialActive = false;
-            // Re-activating the panel triggers TrialOverview.OnEnable(), which
-            // calls Database.EndTrial() and prepares the next task.
-            TrialOverview.gameObject.SetActive(true);
+            Database.EndTrial();
+            if (TrialOverview.showPanelBetweenTasks)
+                TrialOverview.gameObject.SetActive(true);
+            else
+                TrialOverview.AutoStartNextTrial();
         }
     }
 }

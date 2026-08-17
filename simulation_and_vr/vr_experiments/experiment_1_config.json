@@ -1,6 +1,6 @@
 {
   "experimentId": "experiment_1",
-  "requiredParticipants": 2,
+  "requiredParticipants": 1,
   "countdownSeconds": 5,
   "nextSceneName": "LoadTrial",
   "dataAssemblyUrl": "http://localhost:8080",

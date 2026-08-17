@@ -100,7 +100,13 @@ public class POIMarkerScript : MonoBehaviour
     void Update()
     {
         for (int i = 0; i < textMeshParents.Count; i++) {
-            textMeshes[i].transform.rotation = Quaternion.LookRotation(textMeshes[i].transform.position - SceneView.lastActiveSceneView.camera.transform.position);
+            textMeshes[i].transform.rotation = Quaternion.LookRotation(textMeshes[i].transform.position - 
+#if UNITY_EDITOR
+                SceneView.lastActiveSceneView.camera.transform.position
+#else
+                Camera.main.transform.position
+#endif
+            );
         }
     }
 
